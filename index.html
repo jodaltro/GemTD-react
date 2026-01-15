@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>GemTD 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body, html, #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #0f172a; /* Slate 900 */
+        touch-action: none; /* Prevent mobile pull-to-refresh */
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "zustand": "https://esm.sh/zustand@4.5.2?deps=react@18.3.1",
+    "three": "https://esm.sh/three@0.169.0",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@9.114.0?deps=react@18.3.1,three@0.169.0,@react-three/fiber@8.17.8",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@8.17.8?deps=react@18.3.1,three@0.169.0",
+    "@react-three/postprocessing": "https://esm.sh/@react-three/postprocessing@2.16.2?deps=react@18.3.1,three@0.169.0,@react-three/fiber@8.17.8,postprocessing@6.36.0",
+    "postprocessing": "https://esm.sh/postprocessing@6.36.0?deps=three@0.169.0",
+    "lucide-react": "https://esm.sh/lucide-react@0.454.0?deps=react@18.3.1",
+    "uuid": "https://esm.sh/uuid@9.0.1",
+    "three-mesh-bvh": "https://esm.sh/three-mesh-bvh@0.7.3?deps=three@0.169.0",
+    "three-stdlib": "https://esm.sh/three-stdlib@^2.36.1"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

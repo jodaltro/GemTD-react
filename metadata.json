@@ -1,0 +1,5 @@
+{
+  "name": "GemTD 3D Mobile",
+  "description": "A high-performance 3D Tower Defense game using React Three Fiber, Zustand, and InstancedMesh rendering.",
+  "requestFramePermissions": []
+}
