@@ -16,7 +16,7 @@
     "@react-three/drei": "9.114.0",
     "@react-three/fiber": "8.17.8",
     "@react-three/postprocessing": "2.16.2",
-    "postprocessing": "6.36.0",
+    "postprocessing": "6.37.0",
     "lucide-react": "0.454.0",
     "uuid": "9.0.1",
     "three-mesh-bvh": "0.7.3",

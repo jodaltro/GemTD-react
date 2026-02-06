@@ -88,7 +88,9 @@ export const Towers: React.FC = () => {
             // --- DELAY PROJECTILE SPAWN ---
             // Visual delay for recoil impact
             const isOrb = ORB_TYPES.includes(tower.gemType);
-            const impactDelay = isOrb ? 50 : 200; // Faster trigger for chest blast
+            const isSnake = tower.gemType === GemType.EMERALD || tower.gemType === GemType.DARK_EMERALD;
+            // Snake: spawn mid-stroke (~90ms) to align with forward reach
+            const impactDelay = isSnake ? 90 : (isOrb ? 50 : 200);
 
             setTimeout(() => {
                 let spawnX = tower.x;
@@ -99,12 +101,20 @@ export const Towers: React.FC = () => {
                     const dirX = target.x - tower.x;
                     const dirZ = target.y - tower.y; 
                     const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
+                    let fX = 0;
+                    let fZ = 0;
 
                     if (len > 0.001) {
-                        const fX = dirX / len;
-                        const fZ = dirZ / len;
+                        fX = dirX / len;
+                        fZ = dirZ / len;
 
-                        if (isOrb) {
+                        if (isSnake) {
+                            // Snake mouth position - spawn at mouth tip using same forward dir
+                            const offsetForward = 0.38;
+                            spawnX = tower.x + (fX * offsetForward);
+                            spawnZ = tower.y + (fZ * offsetForward);
+                            spawnY = 0.55; // Lower to align with mouth, not the top glow
+                        } else if (isOrb) {
                             // Floating Chest Center Spawn
                             // Slightly forward to clear the mesh
                             const offsetForward = 0.3; 
@@ -125,6 +135,14 @@ export const Towers: React.FC = () => {
                     }
                     
                     const spawnTime = clockRef.current;
+
+                    console.log('SNAKE_DEBUG_SPAWN', {
+                        impactDelay,
+                        timeSinceShotAtSpawn: Date.now() - now,
+                        spawn: { x: spawnX, y: spawnY, z: spawnZ },
+                        dir: { x: fX, z: fZ },
+                        tower: { x: tower.x, y: tower.y },
+                    });
 
                     spawnProjectile({
                         id: `proj-${tower.id}-${Date.now()}`,
