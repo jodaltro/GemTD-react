@@ -2,7 +2,7 @@
 
 
 
-export const GRID_SIZE = 32; // Increased from 10 to 32 (~10x area)
+export const GRID_SIZE = 12; // Small map for development (was 32)
 export const CELL_SIZE = 1.0;
 export const BOARD_OFFSET_X = -(GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 export const BOARD_OFFSET_Z = -(GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
@@ -11,8 +11,8 @@ export const BOARD_OFFSET_Z = -(GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 // Assuming Range 100 ~ 2.5 Grid Cells
 export const RANGE_SCALE = 0.03; 
 
-export const START_POS = { x: 0, y: 16 }; // Adjusted for 32 height
-export const END_POS = { x: 31, y: 16 };   // Adjusted for 32 width
+export const START_POS = { x: 0, y: 6 }; // Adjusted for 12 height
+export const END_POS = { x: 11, y: 6 };   // Adjusted for 12 width
 
 // Wave & HP Constants
 export const HP_BASE = 20;

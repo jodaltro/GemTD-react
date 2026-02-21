@@ -111,8 +111,6 @@ const LIQUID_VERTEX_SHADER = `
     // Organic Wobble
     vec3 pos = position;
     
-    // Combine sine waves for a "blob" effect based on vertex position and time
-    // Frequency matches liquid surface tension movement
     float wobble = sin(pos.x * 6.0 + time * 12.0) * 0.04 + 
                    sin(pos.y * 5.0 + time * 10.0) * 0.04 + 
                    sin(pos.z * 6.0 + time * 14.0) * 0.04;
@@ -214,7 +212,7 @@ const COMET_FRAG = `
   }
 `;
 
-// LIQUID / POISON FRAGMENT SHADER
+// LIQUID / TRANSLUCENT FRAGMENT SHADER (emerald gem-liquid style)
 const LIQUID_FRAG = `
   uniform float time;
   varying vec3 vColor;
@@ -226,19 +224,20 @@ const LIQUID_FRAG = `
     vec3 viewDir = normalize(vViewPosition);
     vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
     
-    // Specular Highlight (Wet/Glossy look)
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 24.0);
+    // Sharp specular highlight (glossy liquid surface)
+    vec3 halfVec = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfVec), 0.0), 60.0);
+    float specSharp = pow(max(dot(normal, halfVec), 0.0), 200.0);
     
-    // Fresnel for edge glow (volume)
-    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.0);
+    // Fresnel: edges glow with the gem color, center is very transparent
+    float fresnel = pow(1.0 - max(dot(normal, viewDir), 0.0), 3.5);
     
-    // Mix Colors
-    // Base color + white specular + enhanced edge color
-    vec3 finalColor = vColor * 0.8 + vec3(1.0) * spec * 0.8 + vColor * fresnel;
+    // Core color: deep translucent tint
+    vec3 finalColor = vColor * 0.3 + vColor * fresnel * 2.0 + vec3(spec * 0.4) + vec3(specSharp * 0.9);
     
-    // Transparency: Center is clearer, edges are opaque (liquid volume)
-    float alpha = 0.65 + (fresnel * 0.35); 
+    // Very transparent in center, opaque at silhouette edges
+    float alpha = 0.12 + fresnel * 0.75 + specSharp * 0.6;
+    alpha = clamp(alpha, 0.0, 1.0);
     
     gl_FragColor = vec4(finalColor, alpha);
   }
@@ -268,7 +267,7 @@ export const Projectiles: React.FC = () => {
           meteor: new THREE.ShaderMaterial({ vertexShader: VERTEX_SHADER, fragmentShader: METEOR_FRAG, uniforms: { ...uniforms }, transparent: false }), 
           orb: new THREE.ShaderMaterial({ vertexShader: VERTEX_SHADER, fragmentShader: ORB_FRAG, uniforms: { ...uniforms }, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
           comet: new THREE.ShaderMaterial({ vertexShader: VERTEX_SHADER, fragmentShader: COMET_FRAG, uniforms: { ...uniforms }, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }),
-          liquid: new THREE.ShaderMaterial({ vertexShader: LIQUID_VERTEX_SHADER, fragmentShader: LIQUID_FRAG, uniforms: { ...uniforms }, transparent: true, blending: THREE.NormalBlending, depthWrite: true }),
+          liquid: new THREE.ShaderMaterial({ vertexShader: LIQUID_VERTEX_SHADER, fragmentShader: LIQUID_FRAG, uniforms: { ...uniforms }, transparent: true, blending: THREE.NormalBlending, depthWrite: false }),
       };
   }, []);
 
@@ -375,7 +374,6 @@ export const Projectiles: React.FC = () => {
       }
       else if (style === 'LIQUID') {
           // Liquid blob stretches to look like a flying stream
-          // Elongated Z axis (2.5) simulates speed/stream
           tempObj.scale.set(0.6 * scaleMult, 0.6 * scaleMult, 2.5 * scaleMult); 
           
           tempObj.updateMatrix();
@@ -384,7 +382,6 @@ export const Projectiles: React.FC = () => {
           lCount++;
 
           // --- LIQUID TRAIL DROPLETS ---
-          // Calculate world direction for accurate trail
           const wx = tX - rX;
           const wy = tY - rY;
           const wz = tZ - rZ;
@@ -393,30 +390,25 @@ export const Projectiles: React.FC = () => {
           const ny = wy / wDist;
           const nz = wz / wDist;
 
-          // Spawn a trail of 5 droplets behind the main head
           const numDrops = 5;
           for (let k = 1; k <= numDrops; k++) {
-              // Position behind the head based on k
               const lag = k * 0.35; 
-              const jitter = 0.15; // Random spray width
+              const jitter = 0.15;
               
               const dX = rX - (nx * lag) + (Math.random() - 0.5) * jitter;
               const dY = rY - (ny * lag) + (Math.random() - 0.5) * jitter;
               const dZ = rZ - (nz * lag) + (Math.random() - 0.5) * jitter;
 
               tempObj.position.set(dX, dY, dZ);
-              
-              // Random rotation for organic look
               tempObj.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
               
-              // Scale down based on distance from head (tapering trail)
               const dScale = (scaleMult * 0.5) / (1 + k * 0.3); 
               tempObj.scale.setScalar(dScale);
               
               tempObj.updateMatrix();
               if (dropletsRef.current) {
                   dropletsRef.current.setMatrixAt(dCount, tempObj.matrix);
-                  dropletsRef.current.setColorAt(dCount, tempColor); // Reuse proj color
+                  dropletsRef.current.setColorAt(dCount, tempColor);
               }
               dCount++;
           }

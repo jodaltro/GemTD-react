@@ -53,7 +53,7 @@ const ORB_TYPES = [
 ];
 
 const SNAKE_TYPES = [
-    GemType.EMERALD, GemType.MALACHITE, GemType.JADE, GemType.DARK_EMERALD
+    GemType.EMERALD, GemType.DARK_EMERALD
 ];
 
 // Preload models
@@ -71,8 +71,6 @@ const ProceduralSnake: React.FC<{
     envMap: THREE.Texture | null;
     timeSinceShotRef: React.MutableRefObject<number>;
 }> = ({ physics, envMap, timeSinceShotRef }) => {
-    const SHOW_DEBUG_COLORS = true;
-
     const bodyRef = useRef<THREE.Mesh>(null);
     const coreRef = useRef<THREE.Group>(null);
     const groupRef = useRef<THREE.Group>(null);
@@ -89,84 +87,82 @@ const ProceduralSnake: React.FC<{
             new THREE.Vector3(0, 1.2, 0.6),
             new THREE.Vector3(0.15, 2.1, 0.3),
             new THREE.Vector3(0, 2.7, 0.45),
-            new THREE.Vector3(0, 3.0, 0.6),
-            new THREE.Vector3(0, 3.2, 0.7)
+            new THREE.Vector3(0, 3.0, 0.8),
+            new THREE.Vector3(0, 3.1, 1.4),
+            new THREE.Vector3(0, 3.0, 2.1)
         ];
         const spineCurve = new THREE.CatmullRomCurve3(curvePoints);
         (spineCurve as any).tension = 0.5;
 
         const getSnakeWidth = (t: number): number => {
-            const baseWidth = 0.35;
-            if (t >= 0.92) {
-                return baseWidth * 0.001;
+            const base = 0.22;
+            // === TAIL (0 → 0.18): thin tip grows to body width ===
+            if (t <= 0.18) {
+                return base * smoothstep(0, 0.18, t);
             }
-            const hoodStart = 0.65;
+            // === BODY (0.18 → 0.40): uniform cylinder ===
+            if (t <= 0.40) return base;
+
+            // === GRADUAL EXPANSION into HOOD (0.40 → 0.85) ===
+            // Uses a single smoothstep over the full range for seamless gradient
             const hoodPeak = 0.85;
             const hoodEnd = 0.92;
-            if (t >= hoodStart && t < hoodEnd) {
-                let hoodFactor = 0;
-                if (t <= hoodPeak) {
-                    hoodFactor = smoothstep(hoodStart, hoodPeak, t);
-                } else {
-                    hoodFactor = 1.0 - smoothstep(hoodPeak, hoodEnd, t);
-                }
-                let widthVal = baseWidth + (hoodFactor * 0.9);
-                if (t >= 0.9 && t < 0.92) {
-                    const trim = smoothstep(0.9, 0.92, t);
-                    widthVal *= (1 - trim * 0.35);
-                }
-                return widthVal;
+            const hoodMaxExtra = 0.9; // Same as original hood
+
+            if (t <= hoodPeak) {
+                const expand = smoothstep(0.40, hoodPeak, t);
+                return base + expand * hoodMaxExtra;
             }
-            if (t > 0.3 && t < hoodStart) {
-                const shrinkFactor = smoothstep(0.3, hoodStart, t);
-                return baseWidth * (1.3 - shrinkFactor * 0.3);
+
+            // === HOOD CLOSING → SNOUT (0.85 → 0.92) ===
+            if (t <= hoodEnd) {
+                const close = smoothstep(hoodPeak, hoodEnd, t);
+                const peakWidth = base + hoodMaxExtra;
+                // Closes to a narrow snout but keeps some width for the bico
+                return peakWidth * (1.0 - close * 0.88);
             }
-            if (t > 0.15 && t <= 0.3) {
-                const growth = smoothstep(0.15, 0.3, t);
-                return baseWidth * (1.0 + growth * 0.3);
-            }
-            if (t <= 0.15) {
-                const thinning = smoothstep(0, 0.15, t);
-                return baseWidth * (0.4 + thinning * 0.6);
-            }
-            return baseWidth;
+
+            // === SNOUT TIP (0.92+): pointed forward ===
+            const tipClose = smoothstep(0.92, 0.98, t);
+            const snoutWidth = (base + hoodMaxExtra) * 0.12;
+            return snoutWidth * (1.0 - tipClose * 0.95);
         };
 
         const getSnakeThickness = (t: number): number => {
-            const baseThickness = 0.35;
-            const width = getSnakeWidth(t);
-            if (t >= 0.92) {
-                return baseThickness * 0.001;
+            const base = 0.22;
+            // === TAIL (0 → 0.18): grows from thin to body ===
+            if (t <= 0.18) {
+                return base * smoothstep(0, 0.18, t);
             }
-            if (width > baseThickness * 1.1 && t >= 0.65 && t < 0.92) {
-                const flattenRatio = baseThickness / width;
-                let thickVal = baseThickness * flattenRatio * 0.5;
-                if (t >= 0.9 && t < 0.92) {
-                    const trim = smoothstep(0.9, 0.92, t);
-                    thickVal *= (1 - trim * 0.4);
-                }
-                return thickVal;
+            // === BODY (0.18 → 0.40): uniform cylinder (round cross-section) ===
+            if (t <= 0.40) return base;
+
+            // === HOOD FLATTENING (0.40 → 0.85): gradually becomes thin & flat ===
+            // Original hood was flattenRatio * 0.5 — very thin at peak
+            const hoodPeak = 0.85;
+            const hoodEnd = 0.92;
+
+            if (t <= hoodPeak) {
+                const flatten = smoothstep(0.40, hoodPeak, t);
+                return base * (1.0 - flatten * 0.82); // → ~18% of base at peak (very flat)
             }
-            if (t > 0.3 && t < 0.65) {
-                const shrinkFactor = smoothstep(0.3, 0.65, t);
-                return baseThickness * (1.3 - shrinkFactor * 0.3);
+
+            // === HOOD CLOSING → SNOUT (0.85 → 0.92): slightly thicker for rounded bico ===
+            if (t <= hoodEnd) {
+                const close = smoothstep(hoodPeak, hoodEnd, t);
+                const peakThick = base * 0.18;
+                return peakThick * (1.0 - close * 0.6);
             }
-            if (t > 0.15 && t <= 0.3) {
-                const growth = smoothstep(0.15, 0.3, t);
-                return baseThickness * (1.0 + growth * 0.3);
-            }
-            if (t <= 0.15) {
-                const thinning = smoothstep(0, 0.15, t);
-                return baseThickness * (0.4 + thinning * 0.6);
-            }
-            return baseThickness;
+
+            // === SNOUT TIP (0.92+) ===
+            const tipClose = smoothstep(0.92, 0.98, t);
+            return base * 0.07 * (1.0 - tipClose * 0.9);
         };
 
         const geometry = new THREE.BufferGeometry();
         const vertices: number[] = [];
         const normals: number[] = [];
         const uvs: number[] = [];
-        const colors: number[] = [];
         const indices: number[] = [];
 
         const radialSegments = 32;
@@ -196,29 +192,6 @@ const ProceduralSnake: React.FC<{
                 const normalVector = new THREE.Vector3(nx, ny, nz).normalize();
                 normals.push(normalVector.x, normalVector.y, normalVector.z);
                 uvs.push(v, t);
-                const sectionColor = new THREE.Color();
-                if (t < 0.1) {
-                    sectionColor.set('#ff3333');
-                } else if (t < 0.2) {
-                    sectionColor.set('#ff7f2a');
-                } else if (t < 0.32) {
-                    sectionColor.set('#33aaff');
-                } else if (t < 0.44) {
-                    sectionColor.set('#1e7ad3');
-                } else if (t < 0.56) {
-                    sectionColor.set('#00c6a2');
-                } else if (t < 0.68) {
-                    sectionColor.set('#00e6c0');
-                } else if (t < 0.78) {
-                    sectionColor.set('#ffd93d');
-                } else if (t < 0.86) {
-                    sectionColor.set('#c2ff3d');
-                } else if (t < 0.92) {
-                    sectionColor.set('#9bff8a');
-                } else {
-                    sectionColor.set('#cc66ff');
-                }
-                colors.push(sectionColor.r, sectionColor.g, sectionColor.b);
             }
         }
 
@@ -236,7 +209,6 @@ const ProceduralSnake: React.FC<{
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
         geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
         geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         geometry.setIndex(indices);
 
         return geometry;
@@ -253,64 +225,92 @@ const ProceduralSnake: React.FC<{
         canvas.width = 2048;
         canvas.height = 2048;
         const ctx = canvas.getContext('2d')!;
-        const gradient = ctx.createLinearGradient(0, 0, 0, 2048);
-        gradient.addColorStop(0, physics.color);
-        gradient.addColorStop(0.6, physics.color);
-        gradient.addColorStop(1, '#1a1a1a');
-        ctx.fillStyle = gradient;
+
+        // Uniform emerald color base
+        ctx.fillStyle = physics.color;
         ctx.fillRect(0, 0, 2048, 2048);
-        const scaleSize = 24;
-        const scaleRows = Math.ceil(2048 / scaleSize) + 2;
-        const scaleCols = Math.ceil(2048 / scaleSize) + 2;
-        for (let row = 0; row < scaleRows; row++) {
-            for (let col = 0; col < scaleCols; col++) {
-                const offset = (row % 2 === 0) ? 0 : scaleSize / 2;
-                const x = col * scaleSize + offset;
-                const y = row * scaleSize;
-                ctx.save();
-                ctx.translate(x, y);
-                ctx.beginPath();
-                ctx.ellipse(0, 0, scaleSize * 0.42, scaleSize * 0.48, 0, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
-                const scaleGradient = ctx.createRadialGradient(
-                    -scaleSize * 0.15, -scaleSize * 0.15, 0,
-                    0, 0, scaleSize * 0.5
-                );
-                scaleGradient.addColorStop(0, 'rgba(255, 255, 255, 0.25)');
-                scaleGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.08)');
-                scaleGradient.addColorStop(1, 'rgba(0, 0, 0, 0.1)');
-                ctx.fillStyle = scaleGradient;
-                ctx.fill();
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-                ctx.lineWidth = 0.5;
-                for (let i = -3; i <= 3; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(i * 2, -scaleSize * 0.4);
-                    ctx.lineTo(i * 2, scaleSize * 0.4);
-                    ctx.stroke();
-                }
-                ctx.restore();
-            }
+
+        // Subtle crystalline veins (internal gem inclusions)
+        for (let i = 0; i < 60; i++) {
+            const sx = Math.random() * 2048;
+            const sy = Math.random() * 2048;
+            const len = 20 + Math.random() * 50;
+            const angle = Math.random() * Math.PI * 2;
+            ctx.beginPath();
+            ctx.moveTo(sx, sy);
+            ctx.lineTo(sx + Math.cos(angle) * len, sy + Math.sin(angle) * len);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.02 + Math.random() * 0.04})`;
+            ctx.lineWidth = 0.3 + Math.random() * 0.8;
+            ctx.stroke();
         }
+
+        // Sparse mineral inclusions
+        for (let i = 0; i < 200; i++) {
+            const sx = Math.random() * 2048;
+            const sy = Math.random() * 2048;
+            const r = 1 + Math.random() * 2;
+            ctx.beginPath();
+            ctx.arc(sx, sy, r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.01 + Math.random() * 0.03})`;
+            ctx.fill();
+        }
+
         const texture = new THREE.CanvasTexture(canvas);
         texture.wrapS = THREE.RepeatWrapping;
         texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(6, 18);
+        texture.repeat.set(5, 14);
+
+        // Normal map for surface depth (gemstone roughness)
+        const nCanvas = document.createElement('canvas');
+        nCanvas.width = 512;
+        nCanvas.height = 512;
+        const nCtx = nCanvas.getContext('2d')!;
+        nCtx.fillStyle = '#8080ff'; // neutral normal
+        nCtx.fillRect(0, 0, 512, 512);
+        // Add bumps
+        for (let i = 0; i < 300; i++) {
+            const bx = Math.random() * 512;
+            const by = Math.random() * 512;
+            const br = 2 + Math.random() * 6;
+            const bGrad = nCtx.createRadialGradient(bx, by, 0, bx, by, br);
+            bGrad.addColorStop(0, 'rgba(160, 160, 255, 0.5)');
+            bGrad.addColorStop(1, 'rgba(128, 128, 255, 0)');
+            nCtx.fillStyle = bGrad;
+            nCtx.fillRect(bx - br, by - br, br * 2, br * 2);
+        }
+        const normalTex = new THREE.CanvasTexture(nCanvas);
+        normalTex.wrapS = THREE.RepeatWrapping;
+        normalTex.wrapT = THREE.RepeatWrapping;
+        normalTex.repeat.set(5, 14);
+
         return new THREE.MeshPhysicalMaterial({
-            color: SHOW_DEBUG_COLORS ? '#ffffff' : physics.color,
-            emissive: SHOW_DEBUG_COLORS ? '#000000' : physics.color,
-            emissiveIntensity: SHOW_DEBUG_COLORS ? 0.0 : 0.2,
-            map: SHOW_DEBUG_COLORS ? null : texture,
-            vertexColors: true,
-            metalness: SHOW_DEBUG_COLORS ? 0.0 : 0.15,
-            roughness: SHOW_DEBUG_COLORS ? 0.65 : 0.4,
-            clearcoat: SHOW_DEBUG_COLORS ? 0.0 : 0.6,
-            clearcoatRoughness: SHOW_DEBUG_COLORS ? 1.0 : 0.25,
-            envMap: SHOW_DEBUG_COLORS ? undefined : envMap || undefined,
-            envMapIntensity: SHOW_DEBUG_COLORS ? 0 : (envMap ? 1.2 : 0),
+            color: physics.color,
+            emissive: physics.color,
+            emissiveIntensity: 0.1,
+            map: texture,
+            normalMap: normalTex,
+            normalScale: new THREE.Vector2(0.15, 0.15),
+            vertexColors: false,
+            metalness: 0.05,
+            roughness: 0.08,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.02,
+            envMap: envMap || undefined,
+            envMapIntensity: envMap ? 2.5 : 0,
+            sheen: 0.1,
+            sheenColor: new THREE.Color(physics.color).multiplyScalar(1.2),
+            sheenRoughness: 0.2,
+            transparent: true,
+            transmission: 0.85,
+            opacity: 0.7,
+            thickness: 0.8,
+            ior: 1.57,
+            attenuationColor: new THREE.Color(physics.color),
+            attenuationDistance: 1.2,
+            specularIntensity: 1.2,
+            specularColor: new THREE.Color('#ffffff'),
             side: THREE.DoubleSide,
+            depthWrite: false,
         });
     }, [physics.color, envMap]);
 
@@ -318,13 +318,22 @@ const ProceduralSnake: React.FC<{
         return new THREE.MeshPhysicalMaterial({
             color: physics.color,
             emissive: physics.color,
-            emissiveIntensity: 0.3,
-            metalness: 0.5,
-            roughness: 0.25,
+            emissiveIntensity: 0.1,
+            metalness: 0.05,
+            roughness: 0.08,
             clearcoat: 1.0,
-            clearcoatRoughness: 0.1,
+            clearcoatRoughness: 0.02,
             envMap: envMap || undefined,
-            envMapIntensity: envMap ? 1.2 : 0,
+            envMapIntensity: envMap ? 2.5 : 0,
+            transparent: true,
+            transmission: 0.85,
+            opacity: 0.7,
+            thickness: 0.8,
+            ior: 1.57,
+            attenuationColor: new THREE.Color(physics.color),
+            attenuationDistance: 1.2,
+            side: THREE.DoubleSide,
+            depthWrite: false,
         });
     }, [physics.color, envMap]);
 
@@ -333,21 +342,28 @@ const ProceduralSnake: React.FC<{
         const timeSinceShot = timeSinceShotRef.current ?? 0;
         let strikeZ = 0;
         let strikeRotation = 0;
-        const strikeDuration = 300;
+        let strikeIntensity = 0; // 0 = idle, 1 = peak strike
+        const strikeDuration = 400;
         let tNorm = timeSinceShot / strikeDuration;
         if (timeSinceShot < strikeDuration) {
-            if (tNorm < 0.1) {
-                const w = smoothstep(0, 0.1, tNorm);
-                strikeZ = -0.25 * w;
-                strikeRotation = -0.12 * w;
-            } else if (tNorm < 0.28) {
-                const s = smoothstep(0.1, 0.28, tNorm);
-                strikeZ = -0.25 + s * 2.4;
-                strikeRotation = -0.12 + s * 0.48;
-            } else if (tNorm < 0.45) {
-                const r = smoothstep(0.28, 0.45, tNorm);
-                strikeZ = 2.15 * (1 - r);
-                strikeRotation = 0.36 * (1 - r);
+            // Wind-up: slight pullback
+            if (tNorm < 0.12) {
+                const w = smoothstep(0, 0.12, tNorm);
+                strikeZ = -0.3 * w;
+                strikeRotation = -0.15 * w;
+                strikeIntensity = w * 0.3;
+            // Strike forward
+            } else if (tNorm < 0.30) {
+                const s = smoothstep(0.12, 0.30, tNorm);
+                strikeZ = -0.3 + s * 2.8;
+                strikeRotation = -0.15 + s * 0.55;
+                strikeIntensity = 0.3 + s * 0.7;
+            // Return to rest
+            } else if (tNorm < 0.65) {
+                const r = smoothstep(0.30, 0.65, tNorm);
+                strikeZ = 2.5 * (1 - r);
+                strikeRotation = 0.40 * (1 - r);
+                strikeIntensity = 1.0 * (1 - r);
             }
         } else {
             tNorm = 1;
@@ -357,24 +373,64 @@ const ProceduralSnake: React.FC<{
         if (bodyRef.current && originalPositions.current) {
             const posArray = bodyRef.current.geometry.attributes.position.array as Float32Array;
             const origArray = originalPositions.current;
+
+            // Find Y range for height normalization
+            const maxY = 3.2;
+            const minY = -0.5;
+            const yRange = maxY - minY;
+
             for (let i = 0; i < posArray.length; i += 3) {
                 const x = origArray[i];
                 const y = origArray[i + 1];
                 const z = origArray[i + 2];
+
+                // Ring-based parameter: all vertices in the same ring get the same value
+                const vertexIndex = i / 3;
+                const ringIndex = Math.floor(vertexIndex / 33); // radialSegments + 1 = 33
+                const tParam = ringIndex / 256; // tubularSegments = 256
+
+                // Normalized height: 0 = tail tip, 1 = head tip
+                const heightNorm = Math.max(0, Math.min(1, (y - minY) / yRange));
+
+                // --- Idle animation (always active) ---
                 const phase = y * 0.5;
                 const wave1 = Math.sin(et * 1.2 + phase) * 0.15;
                 const wave2 = Math.sin(et * 0.8 + phase * 1.3) * 0.1;
                 const verticalFloat = Math.sin(et * 1.5 + phase * 0.8) * 0.12;
                 const depthWave = Math.cos(et * 1.0 + phase * 1.2) * 0.1;
-                const heightRatio = Math.max(0, Math.min(1, (y - 0.5) / 2.7));
-                const strikeFalloff = smoothstep(0, 0.6, heightRatio);
-                const strikeOffset = strikeZ * strikeFalloff;
-                const rotationEffect = strikeRotation * strikeFalloff;
-                const rotatedY = y - (y - 1.5) * rotationEffect * 0.3;
-                const rotatedZ = z + (y - 1.5) * rotationEffect;
-                posArray[i] = x + wave1 + wave2;
-                posArray[i + 1] = rotatedY + verticalFloat;
-                posArray[i + 2] = rotatedZ + depthWave + strikeOffset;
+
+                // --- Tail serpentine: ring-based so all verts in a ring move together (no deformation) ---
+                const tailFade = 1.0 - smoothstep(0.0, 0.45, tParam); // 1 at tail tip, 0 at mid-body
+                const serpentineX = Math.sin(et * 1.8 + tParam * 8.0) * 0.35 * tailFade;
+                const serpentineZ = Math.cos(et * 1.4 + tParam * 6.0) * 0.20 * tailFade;
+                const serpentineY = Math.sin(et * 1.0 + tParam * 5.0) * 0.08 * tailFade;
+
+                // --- Strike deformation: whole body participates naturally ---
+                // tParam goes 0 (tail) → 1 (head), so we use it for smooth full-body motion
+                // Head leads forward, body follows with delay, tail counterbalances backward
+                const strikeForward = smoothstep(0.2, 1.0, tParam); // 0 at tail → 1 at head (body follows)
+                const strikeback = smoothstep(0.25, 0.0, tParam);   // 1 at tail tip → 0 at lower body
+
+                // Forward push: entire upper body moves, intensity grows toward head
+                const forwardOffset = strikeZ * strikeForward;
+                // Tail counterbalance: slight backward pull
+                const backwardOffset = -strikeZ * 0.25 * strikeback;
+
+                // Body wave during strike: a traveling wave that makes the motion look organic
+                const strikeWave = Math.sin(tParam * Math.PI) * strikeIntensity * 0.15; // lateral body flex
+
+                // Rotation: whole body tilts, stronger at head
+                const bodyTilt = strikeRotation * (tParam * 0.8 + 0.1); // even tail gets a tiny bit
+                const rotatedY = y - (y - 1.5) * bodyTilt * 0.3;
+                const rotatedZ = z + (y - 1.5) * bodyTilt;
+
+                // Reduce idle wave amplitude during strike for a "tense" feel
+                const bodyStraighten = Math.sin(tParam * Math.PI); // peaks at middle body
+                const waveScale = 1.0 - strikeIntensity * bodyStraighten * 0.5;
+
+                posArray[i] = x + (wave1 + wave2) * waveScale + serpentineX * (1.0 - strikeIntensity * 0.6) + strikeWave;
+                posArray[i + 1] = rotatedY + verticalFloat * (1.0 - strikeIntensity * 0.4) + serpentineY * (1.0 - strikeIntensity * 0.8);
+                posArray[i + 2] = rotatedZ + depthWave * waveScale + forwardOffset + backwardOffset + serpentineZ * (1.0 - strikeIntensity * 0.6);
             }
             bodyRef.current.geometry.attributes.position.needsUpdate = true;
             bodyRef.current.geometry.computeVertexNormals();
