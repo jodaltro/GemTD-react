@@ -1264,6 +1264,77 @@ const ProceduralStonefish: React.FC<{
     );
 };
 
+const ProceduralDiamondCrown: React.FC<{
+    physics: GemMaterialConfig;
+    envMap: THREE.Texture | null;
+    timeSinceShotRef: React.MutableRefObject<number>;
+}> = ({ physics, envMap, timeSinceShotRef }) => {
+    const groupRef = useRef<THREE.Group>(null);
+    const coreRef = useRef<THREE.Mesh>(null);
+
+    const crownMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#dff7ff', emissive: '#9fe8ff', emissiveIntensity: 0.35,
+        metalness: 0.05, roughness: 0.08, transmission: 0.72, thickness: 1.8,
+        clearcoat: 1, clearcoatRoughness: 0.03, ior: 2.1,
+        envMap: envMap || undefined, envMapIntensity: envMap ? 2.6 : 0, toneMapped: false,
+    }), [envMap]);
+
+    const coreMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: physics.color, emissive: '#a8f5ff', emissiveIntensity: 1.5,
+        metalness: 0, roughness: 0.04, transmission: 0.85, thickness: 1.4,
+        clearcoat: 1, clearcoatRoughness: 0.02, ior: 1.9,
+        envMap: envMap || undefined, envMapIntensity: envMap ? 2.2 : 0, toneMapped: false,
+    }), [envMap, physics.color]);
+
+    useFrame((state) => {
+        const et = state.clock.getElapsedTime();
+        const timeSinceShot = timeSinceShotRef.current;
+        const firingPulse = timeSinceShot < 260 ? 1 - (timeSinceShot / 260) : 0;
+        if (groupRef.current) {
+            groupRef.current.rotation.y = et * 0.4;
+            groupRef.current.position.y = 0.95 + Math.sin(et * 2.2) * 0.04;
+        }
+        if (coreRef.current) {
+            const breath = 1 + Math.sin(et * 5.0) * 0.06;
+            const recoil = 1 + firingPulse * 0.28;
+            coreRef.current.scale.set(0.55 * breath * recoil, 0.42 * breath * recoil, 0.35 * breath * recoil);
+            coreRef.current.position.z = 0.72 + firingPulse * 0.08;
+            const mat = coreRef.current.material as THREE.MeshPhysicalMaterial;
+            mat.emissiveIntensity = 1.5 + firingPulse * 2.2;
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+            <mesh material={crownMaterial} position={[0, 0.72, 0]} castShadow receiveShadow>
+                <cylinderGeometry args={[1.04, 0.92, 0.46, 8, 1, false]} />
+            </mesh>
+            <mesh material={crownMaterial} position={[0, 0.72, 0]} castShadow receiveShadow>
+                <torusGeometry args={[0.98, 0.12, 8, 16]} />
+            </mesh>
+            {Array.from({ length: 8 }).map((_, i) => {
+                const angle = (i / 8) * Math.PI * 2;
+                const x = Math.cos(angle) * 0.95;
+                const z = Math.sin(angle) * 0.95;
+                return (
+                    <group key={`diamond-crown-tip-${i}`} position={[x, 1.12, z]} rotation={[0, -angle, 0]}>
+                        <mesh material={crownMaterial} castShadow receiveShadow>
+                            <coneGeometry args={[0.16, 0.48, 6]} />
+                        </mesh>
+                        <mesh material={crownMaterial} position={[0, 0.3, 0]} castShadow receiveShadow>
+                            <octahedronGeometry args={[0.12, 0]} />
+                        </mesh>
+                    </group>
+                );
+            })}
+            <mesh ref={coreRef} material={coreMaterial} position={[0, 0.86, 0.72]} castShadow>
+                <sphereGeometry args={[1, 18, 14]} />
+            </mesh>
+            <Sparkles count={16} scale={[1.9, 1.2, 1.9]} size={3} speed={0.5} opacity={0.4} color="#bff6ff" position={[0, 0.9, 0]} />
+        </group>
+    );
+};
+
 const GolemModel: React.FC<{ 
     cell: GridCell; 
     enemies: Enemy[];
@@ -1283,6 +1354,7 @@ const GolemModel: React.FC<{
     const spineRef = useRef<THREE.Bone | null>(null);
     const neckRef = useRef<THREE.Bone | null>(null);
     const headRef = useRef<THREE.Bone | null>(null);
+    const isDiamondCrown = cell.gemType === GemType.DIAMOND;
     const { scene, animations } = useGLTF('/glb/golem_-_attack.glb');
     const clone = useMemo(() => SkeletonUtils.clone(scene), [scene]);
     const { actions, names } = useAnimations(animations, clone);
@@ -1495,6 +1567,16 @@ const GolemModel: React.FC<{
                 envMap={envMap}
                 timeSinceShotRef={timeSinceShotRef}
                 stonefishAimRef={stonefishAimRef}
+            />
+        );
+    }
+
+    if (isDiamondCrown) {
+        return (
+            <ProceduralDiamondCrown
+                physics={physics}
+                envMap={envMap}
+                timeSinceShotRef={timeSinceShotRef}
             />
         );
     }
