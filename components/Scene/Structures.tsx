@@ -1273,64 +1273,111 @@ const ProceduralDiamondCrown: React.FC<{
     const coreRef = useRef<THREE.Mesh>(null);
 
     const crownMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: '#dff7ff', emissive: '#9fe8ff', emissiveIntensity: 0.35,
-        metalness: 0.05, roughness: 0.08, transmission: 0.72, thickness: 1.8,
-        clearcoat: 1, clearcoatRoughness: 0.03, ior: 2.1,
-        envMap: envMap || undefined, envMapIntensity: envMap ? 2.6 : 0, toneMapped: false,
+        color: '#e8fbff',
+        emissive: '#bdefff',
+        emissiveIntensity: 0.04,
+        metalness: 0.02,
+        roughness: 0.1,
+        transmission: 0.78,
+        thickness: 1.6,
+        clearcoat: 1,
+        clearcoatRoughness: 0.02,
+        ior: 2.15,
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 2.4 : 0,
+        toneMapped: false,
     }), [envMap]);
 
     const coreMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-        color: physics.color, emissive: '#a8f5ff', emissiveIntensity: 1.5,
-        metalness: 0, roughness: 0.04, transmission: 0.85, thickness: 1.4,
-        clearcoat: 1, clearcoatRoughness: 0.02, ior: 1.9,
-        envMap: envMap || undefined, envMapIntensity: envMap ? 2.2 : 0, toneMapped: false,
+        color: physics.color,
+        emissive: '#c7f6ff',
+        emissiveIntensity: 0.05,
+        metalness: 0,
+        roughness: 0.06,
+        transmission: 0.88,
+        thickness: 1.1,
+        clearcoat: 1,
+        clearcoatRoughness: 0.015,
+        ior: 1.95,
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 2.0 : 0,
+        toneMapped: false,
     }), [envMap, physics.color]);
 
     useFrame((state) => {
         const et = state.clock.getElapsedTime();
         const timeSinceShot = timeSinceShotRef.current;
-        const firingPulse = timeSinceShot < 260 ? 1 - (timeSinceShot / 260) : 0;
+        const firingPulse = timeSinceShot < 240 ? 1 - (timeSinceShot / 240) : 0;
+
         if (groupRef.current) {
-            groupRef.current.rotation.y = et * 0.4;
-            groupRef.current.position.y = 0.95 + Math.sin(et * 2.2) * 0.04;
+            groupRef.current.rotation.y = et * 0.33;
+            groupRef.current.position.y = 0.92 + Math.sin(et * 2.0) * 0.03;
         }
+
         if (coreRef.current) {
-            const breath = 1 + Math.sin(et * 5.0) * 0.06;
-            const recoil = 1 + firingPulse * 0.28;
-            coreRef.current.scale.set(0.55 * breath * recoil, 0.42 * breath * recoil, 0.35 * breath * recoil);
-            coreRef.current.position.z = 0.72 + firingPulse * 0.08;
+            const breathe = 1 + Math.sin(et * 4.4) * 0.03;
+            const pulse = 1 + firingPulse * 0.08;
+            coreRef.current.scale.set(0.42 * breathe * pulse, 0.3 * breathe * pulse, 0.28 * breathe * pulse);
+            coreRef.current.position.z = 0.82 + firingPulse * 0.03;
             const mat = coreRef.current.material as THREE.MeshPhysicalMaterial;
-            mat.emissiveIntensity = 1.5 + firingPulse * 2.2;
+            mat.emissiveIntensity = 0.05 + firingPulse * 0.04;
         }
     });
 
     return (
         <group ref={groupRef}>
-            <mesh material={crownMaterial} position={[0, 0.72, 0]} castShadow receiveShadow>
-                <cylinderGeometry args={[1.04, 0.92, 0.46, 8, 1, false]} />
+            <mesh material={crownMaterial} position={[0, 0.62, 0]} rotation={[Math.PI, 0, 0]} castShadow receiveShadow>
+                <coneGeometry args={[1.02, 0.66, 12]} />
             </mesh>
-            <mesh material={crownMaterial} position={[0, 0.72, 0]} castShadow receiveShadow>
-                <torusGeometry args={[0.98, 0.12, 8, 16]} />
+
+            <mesh material={crownMaterial} position={[0, 0.7, 0]} castShadow receiveShadow>
+                <torusGeometry args={[0.9, 0.1, 10, 24]} />
             </mesh>
+
+            <mesh material={crownMaterial} position={[0, 0.98, 0]} castShadow receiveShadow>
+                <torusGeometry args={[0.86, 0.045, 8, 24]} />
+            </mesh>
+
             {Array.from({ length: 8 }).map((_, i) => {
-                const angle = (i / 8) * Math.PI * 2;
-                const x = Math.cos(angle) * 0.95;
-                const z = Math.sin(angle) * 0.95;
+                const a = (i / 8) * Math.PI * 2;
+                const x = Math.cos(a) * 0.86;
+                const z = Math.sin(a) * 0.86;
+                const h = i % 2 === 0 ? 0.42 : 0.3;
                 return (
-                    <group key={`diamond-crown-tip-${i}`} position={[x, 1.12, z]} rotation={[0, -angle, 0]}>
-                        <mesh material={crownMaterial} castShadow receiveShadow>
-                            <coneGeometry args={[0.16, 0.48, 6]} />
+                    <group key={`diamond-crown-peak-${i}`} position={[x, 1.02, z]} rotation={[0, -a, 0]}>
+                        <mesh material={crownMaterial} position={[0, h * 0.48, 0]} castShadow receiveShadow>
+                            <octahedronGeometry args={[0.12 + h * 0.12, 0]} />
                         </mesh>
-                        <mesh material={crownMaterial} position={[0, 0.3, 0]} castShadow receiveShadow>
-                            <octahedronGeometry args={[0.12, 0]} />
+                        <mesh material={crownMaterial} position={[0, h * 0.15, 0]} castShadow receiveShadow>
+                            <coneGeometry args={[0.1 + h * 0.12, 0.18 + h * 0.5, 8]} />
                         </mesh>
                     </group>
                 );
             })}
-            <mesh ref={coreRef} material={coreMaterial} position={[0, 0.86, 0.72]} castShadow>
-                <sphereGeometry args={[1, 18, 14]} />
+
+            {Array.from({ length: 8 }).map((_, i) => {
+                const a1 = (i / 8) * Math.PI * 2;
+                const a2 = ((i + 1) / 8) * Math.PI * 2;
+                const mid = (a1 + a2) * 0.5;
+                const x = Math.cos(mid) * 0.82;
+                const z = Math.sin(mid) * 0.82;
+                return (
+                    <mesh
+                        key={`diamond-crown-arch-${i}`}
+                        material={crownMaterial}
+                        position={[x, 0.96, z]}
+                        rotation={[0, -mid, 0]}
+                        castShadow
+                        receiveShadow
+                    >
+                        <boxGeometry args={[0.22, 0.08, 0.06]} />
+                    </mesh>
+                );
+            })}
+
+            <mesh ref={coreRef} material={coreMaterial} position={[0, 0.92, 0.82]} castShadow receiveShadow>
+                <sphereGeometry args={[1, 20, 14]} />
             </mesh>
-            <Sparkles count={16} scale={[1.9, 1.2, 1.9]} size={3} speed={0.5} opacity={0.4} color="#bff6ff" position={[0, 0.9, 0]} />
         </group>
     );
 };
