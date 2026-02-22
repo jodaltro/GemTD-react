@@ -30,7 +30,7 @@ const GEM_PHYSICS: Record<GemType, GemMaterialConfig> = {
   [GemType.EMERALD]: { color: '#00c853', emissiveIntensity: 1.2 }, 
   [GemType.TOPAZ]: { color: '#ffab00', emissiveIntensity: 1.2 },
   [GemType.AMETHYST]: { color: '#aa00ff', emissiveIntensity: 1.2 },
-  [GemType.AQUAMARINE]: { color: '#00e5ff', emissiveIntensity: 1.2 },
+  [GemType.AQUAMARINE]: { color: '#7fffd4', emissiveIntensity: 1.4 },
   [GemType.OPAL]: { color: '#b2dfdb', emissiveIntensity: 0.8 },
   [GemType.BLACK_OPAL]: { color: '#311b92', emissiveIntensity: 1.5 },
   [GemType.SILVER]: { color: '#eceff1', emissiveIntensity: 0.8 },
@@ -54,6 +54,10 @@ const ORB_TYPES = [
 
 const SNAKE_TYPES = [
     GemType.EMERALD, GemType.DARK_EMERALD
+];
+
+const STONEFISH_TYPES = [
+    GemType.AQUAMARINE
 ];
 
 // Preload models
@@ -475,6 +479,267 @@ const ProceduralSnake: React.FC<{
     );
 };
 
+// --- Procedural Aquamarine (Water Drop Crystal) ---
+const ProceduralStonefish: React.FC<{
+    physics: GemMaterialConfig;
+    envMap: THREE.Texture | null;
+    timeSinceShotRef: React.MutableRefObject<number>;
+}> = ({ physics, envMap, timeSinceShotRef }) => {
+    const bodyRef = useRef<THREE.Group>(null);
+    const droplets = useRef<(THREE.Mesh | null)[]>([]);
+
+    // Pear/drop crystal — pointy bottom, wide round head at top
+    const teardropGeo = useMemo(() => {
+        const pts: THREE.Vector2[] = [];
+        const SEGMENTS = 32;
+        for (let i = 0; i <= SEGMENTS; i++) {
+            const t = i / SEGMENTS; // 0 = top (pointy tip after PI flip), 1 = bottom (round head after flip)
+            let r: number;
+            if (t < 0.1) {
+                // Thin point (becomes bottom tip visually after rotation)
+                r = t / 0.1 * 0.08;
+            } else if (t < 0.35) {
+                // Gradually widens toward body
+                const s = (t - 0.1) / 0.25;
+                r = 0.08 + s * 0.25;
+            } else if (t < 0.9) {
+                // Big round pear head — widest around 65-70%
+                const s = (t - 0.35) / 0.55;
+                r = 0.33 + Math.sin(s * Math.PI) * 0.35;
+            } else {
+                // Closes smoothly at bottom of geo (= top of head visually)
+                const s = (t - 0.9) / 0.1;
+                r = 0.33 * (1 - s);
+            }
+            const y = t * 1.8 - 0.3;
+            pts.push(new THREE.Vector2(r, y));
+        }
+        pts.push(new THREE.Vector2(0, 1.5));
+        return new THREE.LatheGeometry(pts, 32);
+    }, []);
+
+    // Crystal material
+    const crystalMat = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#7fffff',
+        emissive: '#00e5ff',
+        emissiveIntensity: 0.45,
+        metalness: 0.0,
+        roughness: 0.02,
+        transmission: 0.7,
+        thickness: 1.8,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.01,
+        ior: 1.65,
+        sheen: 1.0,
+        sheenColor: new THREE.Color('#00ffff'),
+        sheenRoughness: 0.15,
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 2.2 : 0,
+        toneMapped: false,
+    }), [envMap]);
+
+    // Water tendril material — high transmission, glowing liquid
+    const waterMat = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#c0f8ff',
+        emissive: '#00d4ff',
+        emissiveIntensity: 0.5,
+        metalness: 0.0,
+        roughness: 0.0,
+        transmission: 0.92,
+        thickness: 0.3,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide,
+        ior: 1.33, // water IOR
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 1.5 : 0,
+        depthWrite: false,
+        toneMapped: false,
+    }), [envMap]);
+
+    // Tendril config: more segments for smooth fluid curves
+    const TENDRIL_SEGMENTS = 14; // per arm — dense chain for smooth liquid flow
+    const TENDRIL_COUNT = 4; // 4 tendrils total (2 left, 2 right)
+    const DROPLET_COUNT = 16; // splashing drops
+
+    // Catmull-Rom interpolation helper for smooth liquid curves
+    const catmullRom = (p0: number, p1: number, p2: number, p3: number, t: number) => {
+        const t2 = t * t, t3 = t2 * t;
+        return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3);
+    };
+
+    // Store refs for all tendrils (4 tendrils × TENDRIL_SEGMENTS each)
+    const tendrils = useRef<(THREE.Mesh | null)[][]>([[], [], [], []]);
+
+    useFrame((state) => {
+        const et = state.clock.getElapsedTime();
+        const timeSinceShot = timeSinceShotRef.current;
+
+        // Float animation
+        if (bodyRef.current) {
+            const floatY = 1.2 + Math.sin(et * 1.1) * 0.1;
+            bodyRef.current.position.y = THREE.MathUtils.lerp(bodyRef.current.position.y, floatY, 0.1);
+            bodyRef.current.rotation.z = Math.sin(et * 0.65) * 0.04;
+            bodyRef.current.rotation.x = Math.sin(et * 0.45) * 0.03;
+            if (timeSinceShot < 400) {
+                const t = timeSinceShot / 400;
+                const lunge = t < 0.2 ? t / 0.2 : 1 - (t - 0.2) / 0.8;
+                bodyRef.current.position.z = lunge * 0.35;
+            } else {
+                bodyRef.current.position.z = THREE.MathUtils.lerp(bodyRef.current.position.z, 0, 0.1);
+            }
+        }
+
+        // === FLUID TENDRIL SIMULATION ===
+        // Each tendril uses control points animated with sine harmonics,
+        // then Catmull-Rom interpolation creates smooth liquid flow between them.
+        const tendrilConfigs = [
+            { side: -1, zOff: 0.0,  speed: 1.0, phase: 0.0,   yBase: -0.1 },  // left upper
+            { side: -1, zOff: 0.2,  speed: 0.85, phase: 1.5,  yBase: -0.25 }, // left lower
+            { side:  1, zOff: 0.0,  speed: 1.0, phase: 0.8,   yBase: -0.1 },  // right upper
+            { side:  1, zOff: -0.2, speed: 0.85, phase: 2.3,  yBase: -0.25 }, // right lower
+        ];
+
+        for (let tIdx = 0; tIdx < TENDRIL_COUNT; tIdx++) {
+            const cfg = tendrilConfigs[tIdx];
+            const side = cfg.side;
+            const sp = cfg.speed;
+            const ph = cfg.phase;
+
+            // Generate 6 control points for the tendril path (animated fluid dynamics)
+            const cpCount = 6;
+            const cpX: number[] = [], cpY: number[] = [], cpZ: number[] = [];
+            for (let c = 0; c < cpCount; c++) {
+                const ct = c / (cpCount - 1); // 0..1 along tendril
+                const flowPhase = et * sp * 1.6 + ph + c * 0.9;
+
+                // X: spreads outward with wave perturbation
+                const baseSpread = 0.3 + ct * 0.9;
+                const waveX = Math.sin(flowPhase * 1.1) * 0.12 * ct;
+                cpX.push(side * (baseSpread + waveX));
+
+                // Y: rises then curves down — gravity-like arc + wave
+                const arc = -ct * ct * 0.6 + ct * 0.15; // parabolic droop
+                const waveY = Math.sin(flowPhase) * 0.18 * (0.3 + ct * 0.7);
+                const turbulence = Math.sin(flowPhase * 2.7 + c * 1.3) * 0.06 * ct;
+                cpY.push(cfg.yBase + arc + waveY + turbulence);
+
+                // Z: sinusoidal sway — fluid undulation
+                const waveZ = Math.sin(flowPhase * 0.7 + c * 0.5) * 0.3 * ct;
+                const secondaryZ = Math.cos(flowPhase * 1.9) * 0.08 * ct * ct;
+                cpZ.push(cfg.zOff + waveZ + secondaryZ);
+            }
+
+            // Interpolate segments along spline
+            for (let i = 0; i < TENDRIL_SEGMENTS; i++) {
+                const mesh = tendrils.current[tIdx]?.[i];
+                if (!mesh) continue;
+
+                const u = i / (TENDRIL_SEGMENTS - 1); // 0..1
+                const splineT = u * (cpCount - 1);
+                const idx = Math.min(Math.floor(splineT), cpCount - 2);
+                const frac = splineT - idx;
+
+                // Catmull-Rom through control points
+                const i0 = Math.max(idx - 1, 0);
+                const i1 = idx;
+                const i2 = Math.min(idx + 1, cpCount - 1);
+                const i3 = Math.min(idx + 2, cpCount - 1);
+
+                const px = catmullRom(cpX[i0], cpX[i1], cpX[i2], cpX[i3], frac);
+                const py = catmullRom(cpY[i0], cpY[i1], cpY[i2], cpY[i3], frac);
+                const pz = catmullRom(cpZ[i0], cpZ[i1], cpZ[i2], cpZ[i3], frac);
+
+                mesh.position.set(px, py, pz);
+
+                // Fluid-like scaling: thick at base, thins out, with pulsation
+                const baseSc = 0.14 * (1 - u * 0.7);
+                const pulse = 1 + Math.sin(et * 3.0 + i * 0.8 + ph) * 0.15;
+                const scaleXZ = baseSc * pulse;
+                // Stretch along flow direction for connected liquid look
+                const scaleY = baseSc * 1.6 * pulse;
+                mesh.scale.set(scaleXZ, scaleY, scaleXZ);
+
+                // Orient segment along flow (look at next point)
+                if (i < TENDRIL_SEGMENTS - 1) {
+                    const nextU = (i + 1) / (TENDRIL_SEGMENTS - 1);
+                    const nextSplineT = nextU * (cpCount - 1);
+                    const nextIdx = Math.min(Math.floor(nextSplineT), cpCount - 2);
+                    const nextFrac = nextSplineT - nextIdx;
+                    const ni0 = Math.max(nextIdx - 1, 0);
+                    const ni1 = nextIdx;
+                    const ni2 = Math.min(nextIdx + 1, cpCount - 1);
+                    const ni3 = Math.min(nextIdx + 2, cpCount - 1);
+                    const nx = catmullRom(cpX[ni0], cpX[ni1], cpX[ni2], cpX[ni3], nextFrac);
+                    const ny = catmullRom(cpY[ni0], cpY[ni1], cpY[ni2], cpY[ni3], nextFrac);
+                    const nz = catmullRom(cpZ[ni0], cpZ[ni1], cpZ[ni2], cpZ[ni3], nextFrac);
+                    // Look in flow direction
+                    const dx = nx - px, dy = ny - py, dz = nz - pz;
+                    mesh.rotation.set(
+                        Math.atan2(dz, Math.sqrt(dx * dx + dy * dy)),
+                        0,
+                        Math.atan2(dy, dx)
+                    );
+                }
+            }
+        }
+
+        // Splashing water droplets — surface tension behavior
+        for (let i = 0; i < DROPLET_COUNT; i++) {
+            const d = droplets.current[i];
+            if (d) {
+                const angle = (i / DROPLET_COUNT) * Math.PI * 2 + et * 0.45 + Math.sin(et * 0.3 + i) * 0.5;
+                const heightPhase = et * 0.9 + i * 1.2;
+                // Some droplets orbit close, some far — surface tension scatter
+                const baseRadius = 0.5 + (i % 3) * 0.25;
+                const radius = baseRadius + Math.sin(et * 0.6 + i * 2.1) * 0.2;
+                // Height: some float near body, some splash up/down
+                const driftY = Math.sin(heightPhase) * 0.4 + Math.sin(heightPhase * 2.3) * 0.15;
+                d.position.set(
+                    Math.cos(angle) * radius,
+                    driftY + (i % 2 === 0 ? 0.1 : -0.2),
+                    Math.sin(angle) * radius
+                );
+                // Pulsating scale — like water drops forming/breaking
+                const ds = 0.04 + Math.sin(et * 2.5 + i * 1.9) * 0.02;
+                const stretch = 1 + Math.abs(Math.sin(et * 1.5 + i * 2.0)) * 0.4;
+                d.scale.set(ds, ds * stretch, ds);
+            }
+        }
+    });
+
+    return (
+        <group ref={bodyRef}>
+            {/* ===== TEARDROP CRYSTAL BODY ===== */}
+            <mesh geometry={teardropGeo} material={crystalMat} castShadow
+                  position={[0, 0.5, 0]} rotation={[Math.PI, 0, 0]}>
+            </mesh>
+
+            {/* ===== FLUID WATER TENDRILS + DROPLETS ===== */}
+            <group position={[0, 0.7, 0]}>
+                {/* 4 tendrils, each with TENDRIL_SEGMENTS spheres */}
+                {Array.from({ length: TENDRIL_COUNT }).map((_, tIdx) => (
+                    <group key={`tendril-${tIdx}`}>
+                        {Array.from({ length: TENDRIL_SEGMENTS }).map((_, i) => (
+                            <mesh key={`t${tIdx}-s${i}`}
+                                  ref={(el) => { if (!tendrils.current[tIdx]) tendrils.current[tIdx] = []; tendrils.current[tIdx][i] = el; }}
+                                  material={waterMat}>
+                                <sphereGeometry args={[1, 10, 8]} />
+                            </mesh>
+                        ))}
+                    </group>
+                ))}
+                {/* Splashing water droplets */}
+                {Array.from({ length: DROPLET_COUNT }).map((_, i) => (
+                    <mesh key={`drop-${i}`} ref={(el) => { droplets.current[i] = el; }} material={waterMat}>
+                        <sphereGeometry args={[1, 8, 6]} />
+                    </mesh>
+                ))}
+            </group>
+        </group>
+    );
+};
+
 const GolemModel: React.FC<{ 
     cell: GridCell; 
     enemies: Enemy[];
@@ -483,8 +748,9 @@ const GolemModel: React.FC<{
     visualConfig: any;
     isOrbType: boolean;
     isSnakeType: boolean;
+    isStonefish: boolean;
     envMap: THREE.Texture | null;
-}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, envMap }) => {
+}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, isStonefish, envMap }) => {
     const group = useRef<THREE.Group>(null);
     const modelContainer = useRef<THREE.Group>(null);
     const chestGlowRef = useRef<THREE.Mesh>(null);
@@ -539,6 +805,7 @@ const GolemModel: React.FC<{
                         headRef.current = bone;
                     }
                 }
+                // Stonefish uses procedural geometry — no bone manipulation needed
             }
             if ((obj as THREE.Mesh).isMesh) {
                 const mesh = obj as THREE.Mesh;
@@ -550,13 +817,34 @@ const GolemModel: React.FC<{
                 const isEye = /eye|glow|lens|visor|mask|face/i.test(meshName) || /eye|glow|lens|visor/i.test(matName);
                 if (isEye) {
                     mesh.material = new THREE.MeshStandardMaterial({
-                        color: isSnakeType ? '#ffff00' : '#ffffff',
-                        emissive: isSnakeType ? '#ff0000' : '#ffffff',
-                        emissiveIntensity: 5.0,
+                        color: isSnakeType ? '#ffff00' : isStonefish ? '#0088ff' : '#ffffff',
+                        emissive: isSnakeType ? '#ff0000' : isStonefish ? '#0066ff' : '#ffffff',
+                        emissiveIntensity: isStonefish ? 8.0 : 5.0,
                         toneMapped: false,
                         roughness: 0.1,
                         metalness: 0.0
                     });
+                } else if (isStonefish) {
+                    const crystalMat = new THREE.MeshPhysicalMaterial({
+                        color: '#7fffff',
+                        emissive: '#00e5ff',
+                        emissiveIntensity: 0.45,
+                        metalness: 0.0,
+                        roughness: 0.02,
+                        transmission: 0.7,
+                        thickness: 1.8,
+                        clearcoat: 1.0,
+                        clearcoatRoughness: 0.01,
+                        ior: 1.65,
+                        sheen: 1.0,
+                        sheenColor: new THREE.Color('#00ffff'),
+                        sheenRoughness: 0.15,
+                        envMap: envMap || undefined,
+                        envMapIntensity: envMap ? 2.2 : 0,
+                        toneMapped: false,
+                    });
+                    mesh.material = crystalMat;
+                    mesh.material.needsUpdate = true;
                 } else {
                     const newMat = new THREE.MeshPhysicalMaterial({
                         color: physics.color,
@@ -574,10 +862,10 @@ const GolemModel: React.FC<{
                 }
             }
         });
-    }, [clone, physics, isOrbType, isSnakeType, envMap]);
+    }, [clone, physics, isOrbType, isSnakeType, isStonefish, envMap]);
 
     useEffect(() => {
-        if (isOrbType || isSnakeType) {
+        if (isOrbType || isSnakeType || isStonefish) {
             Object.values(actions).forEach(a => (a as THREE.AnimationAction | null)?.stop());
             return;
         }
@@ -605,7 +893,7 @@ const GolemModel: React.FC<{
                 attackAction.time = 0;
             }
         }
-    }, [cell.lastShot, actions, names, isOrbType, isSnakeType]);
+    }, [cell.lastShot, actions, names, isOrbType, isSnakeType, isStonefish]);
 
     useFrame((state) => {
         const et = state.clock.getElapsedTime();
@@ -675,6 +963,16 @@ const GolemModel: React.FC<{
         );
     }
 
+    if (isStonefish) {
+        return (
+            <ProceduralStonefish
+                physics={physics}
+                envMap={envMap}
+                timeSinceShotRef={timeSinceShotRef}
+            />
+        );
+    }
+
     return (
         <group ref={group}>
             <group ref={modelContainer}>
@@ -687,7 +985,7 @@ const GolemModel: React.FC<{
                 )}
             </group>
             <Sparkles 
-                count={isSnakeType ? 0 : visualConfig.glowIntensity * 5}
+                count={(isSnakeType || isStonefish) ? 0 : visualConfig.glowIntensity * 5}
                 scale={[2, 3, 2]} 
                 size={4}
                 speed={0.4}
@@ -709,8 +1007,9 @@ const Tower: React.FC<{
     const quality = (cell.quality || GemQuality.CHIPPED) as GemQuality;
     const visualConfig = QUALITY_VISUALS[quality] || QUALITY_VISUALS[GemQuality.CHIPPED];
     const physics = GEM_PHYSICS[cell.gemType!] || DEFAULT_GEM_PHYSICS;
-    const isOrbType = cell.gemType ? ORB_TYPES.includes(cell.gemType) : false;
-    const isSnakeType = cell.gemType ? SNAKE_TYPES.includes(cell.gemType) : false;
+    const isOrbType    = cell.gemType ? ORB_TYPES.includes(cell.gemType)       : false;
+    const isSnakeType  = cell.gemType ? SNAKE_TYPES.includes(cell.gemType)     : false;
+    const isStonefish  = cell.gemType ? STONEFISH_TYPES.includes(cell.gemType) : false;
 
     useFrame((state) => {
         const et = state.clock.getElapsedTime();
@@ -722,6 +1021,7 @@ const Tower: React.FC<{
             if (isSelected) s *= 1.1 + Math.sin(et * 8) * 0.05;
             if (isOrbType) s *= 0.9;
             if (isSnakeType) s *= 0.7;
+            if (isStonefish) s *= 1.0;
             group.current.scale.setScalar(s);
             if (cell.targetId) {
                 const target = enemies.find(e => e.id === cell.targetId);
@@ -734,7 +1034,7 @@ const Tower: React.FC<{
                     group.current.lookAt(lerpedLook.x, 0, lerpedLook.z);
                 }
             } else {
-                if (!isSnakeType) {
+                if (!isSnakeType && !isStonefish) {
                      group.current.rotation.y = Math.sin(et * 0.5) * 0.2;
                 }
             }
@@ -751,6 +1051,7 @@ const Tower: React.FC<{
                 visualConfig={visualConfig}
                 isOrbType={isOrbType}
                 isSnakeType={isSnakeType}
+                isStonefish={isStonefish}
                 envMap={envMap}
             />
         </group>

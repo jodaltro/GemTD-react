@@ -30,6 +30,39 @@ GLB models use skeletal animation. Procedural modifications done via bone scale 
 
 Attack animations trigger on state changes, not continuous loops.
 
+### 7. Tower Visual Archetypes
+Each gem type maps to a distinct visual archetype in `Structures.tsx`. All share the same base GLB golem model but are differentiated via bone manipulation and material overrides:
+
+| Archetype | Gem Types | Technique |
+|---|---|---|
+| **Golem** (default) | Diamond, Ruby, Sapphire, Topaz, etc. | Standard golem with attack animation |
+| **Orb** | Amethyst, Opal, Black Opal, Uranium, Tourmaline | Hide limbs, enlarge head/spine → floating chest |
+| **Snake** | Emerald, Dark Emerald | Procedural tube geometry (`ProceduralSnake`) with vertex animation |
+| **Aquamarine** | Aquamarine | Fully procedural (`ProceduralStonefish`). Pear-shaped `LatheGeometry` crystal body + Catmull-Rom fluid tendrils. Early-returns in `GolemModel`, no golem model used. |
+
+#### Adding a New Visual Archetype
+1. Add type array constant (e.g., `STONEFISH_TYPES`)
+2. Detect in `Tower` component → pass as prop to `GolemModel`
+3. For procedural types: create standalone component, early-return from `GolemModel` (like Snake/Aquamarine)
+4. For golem-based types: add bone manipulation in `GolemModel.useLayoutEffect` + animation in `useFrame`
+5. Wire into render
+
+#### Aquamarine (Water Drop Crystal) Implementation Details
+- **Architecture**: Fully procedural component `ProceduralStonefish` — does NOT use the golem model. Early-returns from `GolemModel` like `ProceduralSnake`.
+- **Body**: `THREE.LatheGeometry` with pear/drop profile (32 segments, 32 radial). Rendered with `rotation={[Math.PI, 0, 0]}` to flip (pointy bottom, round top). Profile: thin point → gradual widen → wide pear belly (widest ~65%) → smooth close at top.
+- **Crystal material**: `MeshPhysicalMaterial` — `color: #7fffff`, `emissive: #00e5ff`, `emissiveIntensity: 0.45`, `transmission: 0.7`, `ior: 1.65`, `clearcoat: 1.0`, `sheen: 1.0` (cyan), `toneMapped: false`, `envMapIntensity: 2.2`
+- **Float animation**: `position.y = 1.2 + sin(t * 1.1) * 0.1`, gentle Z/X rotation sway
+- **Attack**: Forward lunge on z-axis over 400ms (quick in 20%, ease-out 80%)
+- **Water tendrils** (4 total, 2 per side):
+  - 14 sphere segments per tendril interpolated along **Catmull-Rom splines**
+  - 6 animated control points per tendril with sine harmonics for X/Y/Z
+  - Y axis: parabolic gravity arc + wave + turbulence
+  - Z axis: sinusoidal undulation + secondary harmonics
+  - Scale: thick at base, tapers to tip, with pulsation; stretched Y for connected liquid look
+  - Each segment oriented along flow direction via `atan2`
+- **Water droplets** (16): orbit with surface-tension behavior, pulsating ellipsoidal scale, varied radii (close/far scatter)
+- **Water material**: `MeshPhysicalMaterial` — `color: #c0f8ff`, `emissive: #00d4ff`, `transmission: 0.92`, `ior: 1.33` (real water), `toneMapped: false`, `depthWrite: false`
+
 ### 6. Material System
 When creating/modifying materials:
 - Apply environment map for proper reflections
