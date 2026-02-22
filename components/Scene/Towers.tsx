@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../../store/useGameStore';
 import { CellType, GEM_STATS, RANGE_SCALE, GEM_COLORS, GREEDY_CHANCE, GREEDY_BONUS_BASE, GemType, GemQuality } from '../../constants';
 import * as THREE from 'three';
+import { AQUAMARINE_PROJECTILE_VISUAL_DELAY_MS } from './attackTimings';
 
 // Phase 4: Combat Loop - Tower Logic
 export const Towers: React.FC = () => {
@@ -89,8 +90,11 @@ export const Towers: React.FC = () => {
             // Visual delay for recoil impact
             const isOrb = ORB_TYPES.includes(tower.gemType);
             const isSnake = tower.gemType === GemType.EMERALD || tower.gemType === GemType.DARK_EMERALD;
+            const isAquamarine = tower.gemType === GemType.AQUAMARINE;
             // Snake: spawn mid-stroke (~90ms) to align with forward reach
-            const impactDelay = isSnake ? 90 : (isOrb ? 50 : 200);
+            const impactDelay = isSnake
+                ? 90
+                : (isOrb ? 50 : (isAquamarine ? AQUAMARINE_PROJECTILE_VISUAL_DELAY_MS : 200));
 
             setTimeout(() => {
                 let spawnX = tower.x;

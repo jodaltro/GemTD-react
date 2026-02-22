@@ -9,7 +9,7 @@ const tempObj = new THREE.Object3D();
 const tempColor = new THREE.Color();
 
 // --- ARCHETYPES DEFINITION ---
-type ProjectileStyle = 'CRYSTAL' | 'SPIKE' | 'METEOR' | 'ORB' | 'LIQUID';
+type ProjectileStyle = 'CRYSTAL' | 'SPIKE' | 'METEOR' | 'ORB' | 'LIQUID' | 'HIDDEN';
 
 const getProjectileStyle = (type: GemType): ProjectileStyle => {
   switch (type) {
@@ -23,9 +23,10 @@ const getProjectileStyle = (type: GemType): ProjectileStyle => {
     
     case GemType.SAPPHIRE:
     // EMERALD removed from here to allow it to fall through to LIQUID
-    case GemType.AQUAMARINE:
     case GemType.TOURMALINE:
       return 'SPIKE'; 
+    case GemType.AQUAMARINE:
+      return 'HIDDEN';
       
     case GemType.RUBY:
     case GemType.STAR_RUBY:
@@ -326,6 +327,9 @@ export const Projectiles: React.FC = () => {
 
       // --- VISUALS: Positioning & Animation ---
       const style = getProjectileStyle(proj.sourceType);
+      if (style === 'HIDDEN') {
+        continue;
+      }
       
       const rX = proj.x * CELL_SIZE + BOARD_OFFSET_X;
       const rY = proj.y;
