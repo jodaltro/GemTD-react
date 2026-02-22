@@ -76,6 +76,9 @@ export interface Projectile {
   splashRadius?: number;
   homing: boolean;
   spawnTime: number;
+  vx?: number;
+  vy?: number;
+  vz?: number;
 }
 
 export interface VisualEffect {
