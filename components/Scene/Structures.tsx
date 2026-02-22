@@ -784,6 +784,7 @@ const ProceduralStonefish: React.FC<{
     const TENDRIL_COUNT = 4;
     const TENDRIL_SEGMENTS = 18;
     const DROPLET_COUNT = 24;
+    const INNER_FLUID_COUNT = 18;
     const CONTROL_POINTS = 6;
     const RAW_SAMPLES = 28;
 
@@ -825,19 +826,19 @@ const ProceduralStonefish: React.FC<{
     const crystalMat = useMemo(() => new THREE.MeshPhysicalMaterial({
         color: '#7fffff',
         emissive: '#00e5ff',
-        emissiveIntensity: 0.45 + physics.emissiveIntensity * 0.02,
+        emissiveIntensity: 0.26 + physics.emissiveIntensity * 0.015,
         metalness: 0.0,
-        roughness: 0.02,
+        roughness: 0.07,
         transmission: 0.7,
         thickness: 1.8,
         clearcoat: 1.0,
-        clearcoatRoughness: 0.01,
+        clearcoatRoughness: 0.05,
         ior: 1.65,
         sheen: 1.0,
         sheenColor: new THREE.Color('#00ffff'),
-        sheenRoughness: 0.15,
+        sheenRoughness: 0.24,
         envMap: envMap || undefined,
-        envMapIntensity: envMap ? 2.2 : 0,
+        envMapIntensity: envMap ? 1.5 : 0,
         toneMapped: false,
     }), [envMap, physics.emissiveIntensity]);
 
@@ -858,6 +859,38 @@ const ProceduralStonefish: React.FC<{
         depthWrite: false,
         toneMapped: false,
     }), [envMap]);
+
+    const innerFluidMat = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#a7f5ff',
+        emissive: '#4fdfff',
+        emissiveIntensity: 0.22,
+        metalness: 0,
+        roughness: 0.03,
+        transmission: 0.94,
+        thickness: 0.42,
+        transparent: true,
+        opacity: 0.48,
+        ior: 1.33,
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 1.3 : 0,
+        depthWrite: false,
+        toneMapped: false,
+    }), [envMap]);
+
+    const innerFluid = useRef<(THREE.Mesh | null)[]>([]);
+
+    const innerFluidSeeds = useMemo(() => {
+        const fract = (v: number) => v - Math.floor(v);
+        const hash = (v: number) => fract(Math.sin(v * 91.371 + 12.73) * 47453.5453);
+        return Array.from({ length: INNER_FLUID_COUNT }, (_, i) => ({
+            phase: hash(i * 0.71 + 0.9) * Math.PI * 2,
+            radius: 0.06 + hash(i * 1.27 + 3.2) * 0.24,
+            swirl: 0.6 + hash(i * 1.91 + 1.4) * 1.4,
+            yBias: -0.55 + hash(i * 2.23 + 5.7) * 1.1,
+            scale: 0.04 + hash(i * 0.57 + 7.5) * 0.055,
+            wobble: 0.05 + hash(i * 1.37 + 6.6) * 0.14,
+        }));
+    }, []);
 
     const armScratch = useMemo(() => (
         Array.from({ length: TENDRIL_COUNT }, () => ({
@@ -1062,7 +1095,9 @@ const ProceduralStonefish: React.FC<{
         waterMat.emissiveIntensity = 0.46 + attackEnergy * 0.68 + impactPulse * 0.25;
         waterMat.opacity = THREE.MathUtils.clamp(0.62 + attackEnergy * 0.2, 0.55, 0.9);
         waterMat.thickness = 0.25 + attackEnergy * 0.18;
-        crystalMat.emissiveIntensity = 0.45 + pressurize * 0.16 + impactPulse * 0.1;
+        crystalMat.emissiveIntensity = 0.24 + pressurize * 0.08 + impactPulse * 0.05;
+        innerFluidMat.emissiveIntensity = 0.18 + attackEnergy * 0.25 + impactPulse * 0.14;
+        innerFluidMat.opacity = THREE.MathUtils.clamp(0.38 + attackEnergy * 0.22, 0.34, 0.66);
 
         for (let tIdx = 0; tIdx < TENDRIL_COUNT; tIdx++) {
             const cfg = armConfigs[tIdx];
@@ -1230,11 +1265,35 @@ const ProceduralStonefish: React.FC<{
             d.scale.set(ds, ds * stretch, ds);
             d.visible = true;
         }
+
+        for (let i = 0; i < INNER_FLUID_COUNT; i++) {
+            const blob = innerFluid.current[i];
+            if (!blob) continue;
+            const seed = innerFluidSeeds[i];
+            const pulse = 0.35 + attackEnergy * 0.65;
+            const phase = et * (0.9 + seed.swirl) + seed.phase;
+            const orbit = seed.radius + Math.sin(phase * 1.7) * seed.wobble * (1 + attackEnergy * 0.4);
+            const x = Math.cos(phase) * orbit;
+            const z = Math.sin(phase * 0.92 + seed.phase * 0.37) * orbit * 0.9;
+            const y = seed.yBias * 0.42 + Math.sin(phase * 1.2 + seed.phase) * 0.08 + Math.cos(et * 1.4 + i) * 0.03;
+            blob.position.set(x, y, z);
+            const squash = 1 + Math.sin(phase * 2.1) * 0.25 * pulse;
+            blob.scale.set(seed.scale * (0.85 + pulse * 0.3), seed.scale * squash, seed.scale * (1.05 - (squash - 1) * 0.5));
+            blob.visible = true;
+        }
     });
 
     return (
         <group ref={bodyRef}>
             <mesh geometry={teardropGeo} material={crystalMat} castShadow position={[0, 0.5, 0]} rotation={[Math.PI, 0, 0]} />
+
+            <group position={[0, 0.5, 0]} rotation={[Math.PI, 0, 0]}>
+                {Array.from({ length: INNER_FLUID_COUNT }).map((_, i) => (
+                    <mesh key={`stonefish-inner-fluid-${i}`} ref={(el) => { innerFluid.current[i] = el; }} material={innerFluidMat}>
+                        <sphereGeometry args={[1, 14, 12]} />
+                    </mesh>
+                ))}
+            </group>
 
             <group position={[0, 0.7, 0]}>
                 {Array.from({ length: TENDRIL_COUNT }).map((_, tIdx) => (
