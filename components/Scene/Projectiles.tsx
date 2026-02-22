@@ -308,8 +308,12 @@ export const Projectiles: React.FC = () => {
       const dy = enemyHeight - proj.y;
       const dz = target.y - proj.z;
       const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      const hitRadius = isAquamarine ? 0.75 : 0.5;
-      const speedMult = isAquamarine ? 1.7 : 1;
+      const hitRadius = isAquamarine ? 0.85 : 0.5;
+      // Aquamarine can miss the opening shot on distant targets if it starts too slow.
+      // Give it a short long-range boost so the first connect is more reliable.
+      const speedMult = isAquamarine
+        ? (dist > 4 ? 2.3 : 1.7)
+        : 1;
       const moveDist = proj.speed * speedMult * delta;
       const willReachThisFrame = moveDist >= dist;
 
