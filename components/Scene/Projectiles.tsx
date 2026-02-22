@@ -309,21 +309,16 @@ export const Projectiles: React.FC = () => {
       const dz = target.y - proj.z;
       const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
       const hitRadius = isAquamarine ? 0.75 : 0.5;
-
-<<<<<<< ours
-      const moveDist = proj.speed * delta;
-      const hitRadius = target.isFlying ? 0.24 : 0.16;
+      const speedMult = isAquamarine ? 1.7 : 1;
+      const moveDist = proj.speed * speedMult * delta;
       const willReachThisFrame = moveDist >= dist;
 
-      if (dist <= hitRadius || willReachThisFrame) {
+      if (dist < hitRadius || willReachThisFrame) {
         if (willReachThisFrame) {
           proj.x = target.x;
-          proj.y = target.isFlying ? 1.5 : 0.4;
+          proj.y = enemyHeight;
           proj.z = target.y;
         }
-=======
-      if (dist < hitRadius) {
->>>>>>> theirs
         // HIT
         damageEnemy(proj.targetId, proj.damage, proj.sourceType, false);
         if (proj.isSplash) {
@@ -340,15 +335,6 @@ export const Projectiles: React.FC = () => {
       }
 
       // Move
-<<<<<<< ours
-      const factor = moveDist / dist;
-      proj.x += dx * factor;
-      proj.y += dy * factor;
-      proj.z += dz * factor;
-=======
-      const speedMult = isAquamarine ? 1.7 : 1;
-      const moveDist = proj.speed * speedMult * delta;
-
       // Prevent overshoot that can make the projectile orbit around the target.
       if (moveDist >= dist) {
         proj.x = target.x;
@@ -360,7 +346,6 @@ export const Projectiles: React.FC = () => {
         proj.y += dy * factor;
         proj.z += dz * factor;
       }
->>>>>>> theirs
 
       // --- VISUALS: Positioning & Animation ---
       const style = getProjectileStyle(proj.sourceType);
@@ -413,24 +398,18 @@ export const Projectiles: React.FC = () => {
           meteorRef.current!.setColorAt(mCount, tempColor.set(proj.color));
           mCount++;
       }
-<<<<<<< ours
       else if (style === 'LIQUID' || style === 'VENOM') {
           const isVenom = style === 'VENOM';
           const venomPulse = isVenom ? (0.88 + Math.sin(time * 20 + i * 0.6) * 0.16) : 1.0;
-          // Liquid blob stretches to look like a flying stream
-          tempObj.scale.set(0.6 * scaleMult * venomPulse, 0.6 * scaleMult, 2.5 * scaleMult * (isVenom ? 1.2 : 1.0)); 
-=======
-      else if (style === 'LIQUID') {
-          // Aquamarine looks like a short sticky tentacle wrapping the target.
           if (isAquamarine) {
+              // Aquamarine looks like a short sticky tentacle wrapping the target.
               const wrapPulse = 1.0 + Math.sin(time * 40 + i) * 0.15;
               tempObj.scale.set(0.45 * scaleMult, 0.45 * scaleMult, 3.2 * scaleMult * wrapPulse);
               tempObj.rotateZ(Math.sin(time * 30 + i) * 0.35);
           } else {
               // Liquid blob stretches to look like a flying stream
-              tempObj.scale.set(0.6 * scaleMult, 0.6 * scaleMult, 2.5 * scaleMult);
+              tempObj.scale.set(0.6 * scaleMult * venomPulse, 0.6 * scaleMult, 2.5 * scaleMult * (isVenom ? 1.2 : 1.0)); 
           }
->>>>>>> theirs
           
           tempObj.updateMatrix();
           liquidRef.current!.setMatrixAt(lCount, tempObj.matrix);
