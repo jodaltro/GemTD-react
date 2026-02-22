@@ -301,13 +301,11 @@ export const Projectiles: React.FC = () => {
 
       const isAquamarine = proj.sourceType === GemType.AQUAMARINE;
       const enemyHeight = target.isFlying ? 1.5 : 0.4;
-      // Aquamarine gets a small predictive lock so it can "stick" to targets
-      // even when the enemy is moving directly towards the tower.
-      const lockAhead = isAquamarine ? 0.12 : 0;
-      const dx = (target.x + lockAhead) - proj.x;
+      const dx = target.x - proj.x;
       const dy = enemyHeight - proj.y;
       const dz = target.y - proj.z;
       const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
       const hitRadius = isAquamarine ? 0.85 : 0.5;
       // Aquamarine can miss the opening shot on distant targets if it starts too slow.
       // Give it a short long-range boost so the first connect is more reliable.
@@ -317,12 +315,7 @@ export const Projectiles: React.FC = () => {
       const moveDist = proj.speed * speedMult * delta;
       const willReachThisFrame = moveDist >= dist;
 
-      if (dist < hitRadius || willReachThisFrame) {
-        if (willReachThisFrame) {
-          proj.x = target.x;
-          proj.y = enemyHeight;
-          proj.z = target.y;
-        }
+      if (dist < hitRadius) {
         // HIT
         damageEnemy(proj.targetId, proj.damage, proj.sourceType, false);
         if (proj.isSplash) {
@@ -339,16 +332,93 @@ export const Projectiles: React.FC = () => {
       }
 
       // Move
-      // Prevent overshoot that can make the projectile orbit around the target.
-      if (moveDist >= dist) {
-        proj.x = target.x;
-        proj.y = enemyHeight;
-        proj.z = target.y;
+      const prevX = proj.x;
+      const prevY = proj.y;
+      const prevZ = proj.z;
+
+      if (isAquamarine) {
+        // Curved homing: keep internal velocity and steer it toward the target every frame.
+        // This lets the tentacle bend and still connect with fast targets at long range.
+        const currentDist = Math.max(dist, 0.001);
+        const speedMult = currentDist > 4 ? 2.4 : 1.9;
+        const moveDist = proj.speed * speedMult * delta;
+
+        const desiredX = dx / currentDist;
+        const desiredY = dy / currentDist;
+        const desiredZ = dz / currentDist;
+
+        const currentVelMag = Math.hypot(proj.vx ?? 0, proj.vy ?? 0, proj.vz ?? 0);
+        let currentDirX = currentVelMag > 0.0001 ? (proj.vx ?? 0) / currentVelMag : desiredX;
+        let currentDirY = currentVelMag > 0.0001 ? (proj.vy ?? 0) / currentVelMag : desiredY;
+        let currentDirZ = currentVelMag > 0.0001 ? (proj.vz ?? 0) / currentVelMag : desiredZ;
+
+        const turnLerp = Math.min(1, delta * 8.5);
+        currentDirX += (desiredX - currentDirX) * turnLerp;
+        currentDirY += (desiredY - currentDirY) * turnLerp;
+        currentDirZ += (desiredZ - currentDirZ) * turnLerp;
+
+        const dirMag = Math.max(Math.hypot(currentDirX, currentDirY, currentDirZ), 0.001);
+        currentDirX /= dirMag;
+        currentDirY /= dirMag;
+        currentDirZ /= dirMag;
+
+        proj.vx = currentDirX * proj.speed * speedMult;
+        proj.vy = currentDirY * proj.speed * speedMult;
+        proj.vz = currentDirZ * proj.speed * speedMult;
+
+        if (moveDist >= currentDist) {
+          proj.x = target.x;
+          proj.y = enemyHeight;
+          proj.z = target.y;
+        } else {
+          proj.x += currentDirX * moveDist;
+          proj.y += currentDirY * moveDist;
+          proj.z += currentDirZ * moveDist;
+        }
       } else {
-        const factor = moveDist / dist;
-        proj.x += dx * factor;
-        proj.y += dy * factor;
-        proj.z += dz * factor;
+        const speedMult = 1;
+        const moveDist = proj.speed * speedMult * delta;
+        if (moveDist >= dist) {
+          proj.x = target.x;
+          proj.y = enemyHeight;
+          proj.z = target.y;
+        } else {
+          const factor = moveDist / dist;
+          proj.x += dx * factor;
+          proj.y += dy * factor;
+          proj.z += dz * factor;
+        }
+      }
+
+      // Segment hit test (helps when target crosses near the curved path between frames)
+      const segDX = proj.x - prevX;
+      const segDY = proj.y - prevY;
+      const segDZ = proj.z - prevZ;
+      const segLenSq = segDX*segDX + segDY*segDY + segDZ*segDZ;
+      if (segLenSq > 0.000001) {
+        const toTargetX = target.x - prevX;
+        const toTargetY = enemyHeight - prevY;
+        const toTargetZ = target.y - prevZ;
+        const t = Math.min(1, Math.max(0, (toTargetX*segDX + toTargetY*segDY + toTargetZ*segDZ) / segLenSq));
+        const closestX = prevX + segDX * t;
+        const closestY = prevY + segDY * t;
+        const closestZ = prevZ + segDZ * t;
+        const missDist = Math.hypot(target.x - closestX, enemyHeight - closestY, target.y - closestZ);
+
+        if (missDist < hitRadius) {
+          damageEnemy(proj.targetId, proj.damage, proj.sourceType, false);
+          if (proj.isSplash) {
+              enemies.forEach(e => {
+                  if (e.id === target.id || e.isDead) return;
+                  const d2 = Math.sqrt(Math.pow(e.x - target.x, 2) + Math.pow(e.y - target.y, 2));
+                  if (d2 < (proj.splashRadius || 1.5)) {
+                      damageEnemy(e.id, proj.damage * 0.5, proj.sourceType, true);
+                  }
+              });
+          }
+          removeProjectile(proj.id);
+          continue;
+        }
       }
 
       // --- VISUALS: Positioning & Animation ---

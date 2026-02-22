@@ -148,6 +148,11 @@ export const Towers: React.FC = () => {
                         tower: { x: tower.x, y: tower.y },
                     });
 
+                    const dirToTargetX = target.x - spawnX;
+                    const dirToTargetY = (target.isFlying ? 1.5 : 0.4) - spawnY;
+                    const dirToTargetZ = target.y - spawnZ;
+                    const dirMag = Math.max(Math.hypot(dirToTargetX, dirToTargetY, dirToTargetZ), 0.001);
+
                     spawnProjectile({
                         id: `proj-${tower.id}-${Date.now()}`,
                         x: spawnX,
@@ -161,7 +166,10 @@ export const Towers: React.FC = () => {
                         isSplash: stats.special.includes('Splash') || stats.special.includes('Area'),
                         splashRadius: stats.special.includes('Area') ? 2.5 : 1.5,
                         homing: true,
-                        spawnTime: spawnTime 
+                        spawnTime: spawnTime,
+                        vx: (dirToTargetX / dirMag) * 15.0,
+                        vy: (dirToTargetY / dirMag) * 15.0,
+                        vz: (dirToTargetZ / dirMag) * 15.0,
                     });
 
                      // --- GREEDY MECHANIC ---
