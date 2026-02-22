@@ -3,7 +3,7 @@ import React, { useRef, useMemo } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../../store/useGameStore';
-import { CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Z, GemType } from '../../constants';
+import { CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Z, END_POS, GemType } from '../../constants';
 
 const tempObj = new THREE.Object3D();
 const tempColor = new THREE.Color();
@@ -258,6 +258,7 @@ export const Projectiles: React.FC = () => {
 
   const projectiles = useGameStore((state) => state.projectiles);
   const enemies = useGameStore((state) => state.enemies);
+  const flowField = useGameStore((state) => state.flowField);
   const damageEnemy = useGameStore((state) => state.damageEnemy);
   const removeProjectile = useGameStore((state) => state.removeProjectile);
 
@@ -301,15 +302,46 @@ export const Projectiles: React.FC = () => {
 
       const isAquamarine = proj.sourceType === GemType.AQUAMARINE;
       const enemyHeight = target.isFlying ? 1.5 : 0.4;
-      // Aquamarine gets a small predictive lock so it can "stick" to targets
-      // even when the enemy is moving directly towards the tower.
-      const lockAhead = isAquamarine ? 0.12 : 0;
-      const dx = (target.x + lockAhead) - proj.x;
+      // Aquamarine now uses dynamic lead prediction based on enemy movement direction and speed,
+      // so the tentacle can connect even when the target is fast and farther away.
+      let aimX = target.x;
+      let aimZ = target.y;
       const dy = enemyHeight - proj.y;
-      const dz = target.y - proj.z;
+
+      if (isAquamarine) {
+        const cellId = `${Math.round(target.x)}-${Math.round(target.y)}`;
+        const flow = target.isFlying
+          ? null
+          : flowField[cellId];
+        const moveDirX = flow?.x ?? (() => {
+          const vx = END_POS.x - target.x;
+          const vz = END_POS.y - target.y;
+          const mag = Math.hypot(vx, vz);
+          return mag > 0.001 ? vx / mag : 0;
+        })();
+        const moveDirZ = flow?.y ?? (() => {
+          const vx = END_POS.x - target.x;
+          const vz = END_POS.y - target.y;
+          const mag = Math.hypot(vx, vz);
+          return mag > 0.001 ? vz / mag : 0;
+        })();
+
+        const directDist = Math.hypot(target.x - proj.x, target.y - proj.z);
+        const aquamarineSpeed = proj.speed * (directDist > 4 ? 2.3 : 1.7);
+        const travelTime = directDist / Math.max(aquamarineSpeed, 0.001);
+        const leadTime = Math.min(0.45, Math.max(0.1, travelTime * 0.9));
+
+        aimX = target.x + moveDirX * target.speed * leadTime;
+        aimZ = target.y + moveDirZ * target.speed * leadTime;
+      }
+
+      const dx = aimX - proj.x;
+      const dz = aimZ - proj.z;
       const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
-      const hitRadius = isAquamarine ? 0.75 : 0.5;
-      const speedMult = isAquamarine ? 1.7 : 1;
+      const hitRadius = isAquamarine ? 0.9 : 0.5;
+      const speedMult = isAquamarine
+        ? (dist > 4 ? 2.35 : 1.75)
+        : 1;
       const moveDist = proj.speed * speedMult * delta;
       const willReachThisFrame = moveDist >= dist;
 
