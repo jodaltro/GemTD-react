@@ -1323,6 +1323,163 @@ const ProceduralStonefish: React.FC<{
     );
 };
 
+const ProceduralDiamondCrown: React.FC<{
+    physics: GemMaterialConfig;
+    envMap: THREE.Texture | null;
+    timeSinceShotRef: React.MutableRefObject<number>;
+}> = ({ physics, envMap, timeSinceShotRef }) => {
+    const groupRef = useRef<THREE.Group>(null);
+    const coreRef = useRef<THREE.Mesh>(null);
+
+    const crownMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
+        color: '#ecfbff',
+        emissive: '#d2f6ff',
+        emissiveIntensity: 0.015,
+        metalness: 0.01,
+        roughness: 0.08,
+        transmission: 0.86,
+        thickness: 1.55,
+        clearcoat: 1,
+        clearcoatRoughness: 0.012,
+        ior: 2.2,
+        reflectivity: 1,
+        envMap: envMap || undefined,
+        envMapIntensity: envMap ? 2.8 : 0,
+        toneMapped: false,
+    }), [envMap]);
+
+    const coreMaterial = useMemo(() => {
+        const mat = new THREE.MeshPhysicalMaterial({
+            color: physics.color,
+            emissive: '#c7f6ff',
+            emissiveIntensity: 0.02,
+            metalness: 0,
+            roughness: 0.04,
+            transmission: 0.92,
+            thickness: 1.3,
+            clearcoat: 1,
+            clearcoatRoughness: 0.01,
+            ior: 2.05,
+            iridescence: 0.22,
+            iridescenceIOR: 1.3,
+            envMap: envMap || undefined,
+            envMapIntensity: envMap ? 2.6 : 0,
+            toneMapped: false,
+        });
+
+        mat.onBeforeCompile = (shader) => {
+            shader.uniforms.uDispStrength = { value: 0.012 };
+            shader.fragmentShader = shader.fragmentShader
+                .replace(
+                    '#include <transmission_pars_fragment>',
+                    `#include <transmission_pars_fragment>
+uniform float uDispStrength;`
+                )
+                .replace(
+                    '#include <output_fragment>',
+                    `
+                    #include <output_fragment>
+                    float dispersionMask = clamp(1.0 - dot(normalize(vNormal), vec3(0.0, 0.0, 1.0)), 0.0, 1.0);
+                    gl_FragColor.rgb += vec3(
+                        uDispStrength * dispersionMask,
+                        uDispStrength * 0.45 * dispersionMask,
+                        uDispStrength * 0.15 * dispersionMask
+                    );`
+                );
+        };
+
+        return mat;
+    }, [envMap, physics.color]);
+
+    useFrame((state) => {
+        const et = state.clock.getElapsedTime();
+        const timeSinceShot = timeSinceShotRef.current;
+        const firePulse = timeSinceShot < 220 ? 1 - (timeSinceShot / 220) : 0;
+
+        if (groupRef.current) {
+            groupRef.current.rotation.y = et * 0.28;
+            groupRef.current.position.y = 0.93 + Math.sin(et * 1.8) * 0.02;
+        }
+
+        if (coreRef.current) {
+            const breathing = 1 + Math.sin(et * 3.8) * 0.02;
+            const pulse = 1 + firePulse * 0.05;
+            coreRef.current.scale.set(0.46 * breathing * pulse, 0.31 * breathing * pulse, 0.29 * breathing * pulse);
+            const mat = coreRef.current.material as THREE.MeshPhysicalMaterial;
+            mat.emissiveIntensity = 0.02 + firePulse * 0.02;
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+            {/* Base lapidada contínua */}
+            <mesh material={crownMaterial} position={[0, 0.6, 0]} rotation={[Math.PI, 0, 0]} castShadow receiveShadow>
+                <coneGeometry args={[1.04, 0.62, 14]} />
+            </mesh>
+            <mesh material={crownMaterial} position={[0, 0.58, 0]} castShadow receiveShadow>
+                <torusGeometry args={[0.93, 0.08, 10, 32]} />
+            </mesh>
+            <mesh material={crownMaterial} position={[0, 0.96, 0]} castShadow receiveShadow>
+                <torusGeometry args={[0.85, 0.045, 8, 32]} />
+            </mesh>
+
+            {/* Estrutura de renda da tiara */}
+            {Array.from({ length: 16 }).map((_, i) => {
+                const a = (i / 16) * Math.PI * 2;
+                const x = Math.cos(a) * 0.845;
+                const z = Math.sin(a) * 0.845;
+                return (
+                    <mesh
+                        key={`diamond-crown-lattice-${i}`}
+                        material={crownMaterial}
+                        position={[x, 0.86 + Math.sin(a * 2) * 0.03, z]}
+                        rotation={[0, -a, 0]}
+                        castShadow
+                        receiveShadow
+                    >
+                        <boxGeometry args={[0.17, 0.05, 0.03]} />
+                    </mesh>
+                );
+            })}
+
+            {/* Pontas com variação orgânica */}
+            {Array.from({ length: 10 }).map((_, i) => {
+                const a = (i / 10) * Math.PI * 2;
+                const x = Math.cos(a) * 0.84;
+                const z = Math.sin(a) * 0.84;
+                const h = i % 2 === 0 ? 0.52 : 0.35;
+                return (
+                    <group key={`diamond-crown-peak-${i}`} position={[x, 0.98, z]} rotation={[0, -a, 0]}>
+                        <mesh material={crownMaterial} position={[0, h * 0.28, 0]} castShadow receiveShadow>
+                            <coneGeometry args={[0.08 + h * 0.09, 0.2 + h * 0.58, 8]} />
+                        </mesh>
+                        <mesh material={crownMaterial} position={[0, h * 0.72, 0]} castShadow receiveShadow>
+                            <octahedronGeometry args={[0.08 + h * 0.1, 0]} />
+                        </mesh>
+                    </group>
+                );
+            })}
+
+            {/* Joias pequenas no aro superior */}
+            {Array.from({ length: 10 }).map((_, i) => {
+                const a = (i / 10) * Math.PI * 2;
+                const x = Math.cos(a) * 0.83;
+                const z = Math.sin(a) * 0.83;
+                return (
+                    <mesh key={`diamond-crown-stud-${i}`} material={crownMaterial} position={[x, 0.99, z]} castShadow receiveShadow>
+                        <octahedronGeometry args={[0.045, 0]} />
+                    </mesh>
+                );
+            })}
+
+            {/* Núcleo oval frontal com brilho fraco */}
+            <mesh ref={coreRef} material={coreMaterial} position={[0, 0.92, 0.84]} castShadow receiveShadow>
+                <sphereGeometry args={[1, 22, 16]} />
+            </mesh>
+        </group>
+    );
+};
+
 const GolemModel: React.FC<{ 
     cell: GridCell; 
     enemies: Enemy[];
@@ -1342,6 +1499,7 @@ const GolemModel: React.FC<{
     const spineRef = useRef<THREE.Bone | null>(null);
     const neckRef = useRef<THREE.Bone | null>(null);
     const headRef = useRef<THREE.Bone | null>(null);
+    const isDiamondCrown = cell.gemType === GemType.DIAMOND;
     const { scene, animations } = useGLTF('/glb/golem_-_attack.glb');
     const clone = useMemo(() => SkeletonUtils.clone(scene), [scene]);
     const { actions, names } = useAnimations(animations, clone);
@@ -1554,6 +1712,16 @@ const GolemModel: React.FC<{
                 envMap={envMap}
                 timeSinceShotRef={timeSinceShotRef}
                 stonefishAimRef={stonefishAimRef}
+            />
+        );
+    }
+
+    if (isDiamondCrown) {
+        return (
+            <ProceduralDiamondCrown
+                physics={physics}
+                envMap={envMap}
+                timeSinceShotRef={timeSinceShotRef}
             />
         );
     }
