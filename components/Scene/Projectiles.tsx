@@ -14,6 +14,7 @@ type ProjectileStyle = 'CRYSTAL' | 'SPIKE' | 'METEOR' | 'ORB' | 'LIQUID' | 'VENO
 const getProjectileStyle = (type: GemType): ProjectileStyle => {
   switch (type) {
     case GemType.DIAMOND:
+      return 'HIDDEN';
     case GemType.PINK_DIAMOND:
     case GemType.TOPAZ:
     case GemType.SILVER:
