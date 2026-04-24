@@ -32,6 +32,12 @@ type StonefishAimData = {
     targetId: string | null;
 };
 
+type DiamondAimData = {
+    hasTarget: boolean;
+    localTarget: THREE.Vector3;
+    targetId: string | null;
+};
+
 const DEFAULT_GEM_PHYSICS: GemMaterialConfig = {
     color: '#ffffff', emissiveIntensity: 3.0
 };
@@ -98,6 +104,7 @@ const ProceduralSnake: React.FC<{
     const bodyRef = useRef<THREE.Mesh>(null);
     const coreRef = useRef<THREE.Group>(null);
     const groupRef = useRef<THREE.Group>(null);
+    const projectileGroupRef = useRef<THREE.Group>(null);
     const originalPositions = useRef<Float32Array | null>(null);
     const debugLoggedRef = useRef<boolean>(false);
     const strikeStateRef = useRef({ strikeZ: 0, strikeRotation: 0 });
@@ -1328,89 +1335,312 @@ const ProceduralDiamondCrown: React.FC<{
     physics: GemMaterialConfig;
     envMap: THREE.Texture | null;
     timeSinceShotRef: React.MutableRefObject<number>;
-}> = ({ physics, envMap, timeSinceShotRef }) => {
+    diamondAimRef: React.MutableRefObject<DiamondAimData>;
+}> = ({ physics, envMap, timeSinceShotRef, diamondAimRef }) => {
     const groupRef = useRef<THREE.Group>(null);
+    const projectileGroupRef = useRef<THREE.Group>(null);
     const { scene } = useGLTF('/glb/diamond.glb');
+    const DIAMOND_SCALE = 1.1;
+    const DIAMOND_Y = 0.65;
+    const SPIKE_COUNT = 5;
+    const diamondMeshesRef = useRef<THREE.Mesh[]>([]);
+    const spikeCooldownRef = useRef<number[]>(Array(SPIKE_COUNT).fill(0));
+    const prevShotRef = useRef<number>(Number.POSITIVE_INFINITY);
+    const recoilRef = useRef<number>(0);
+    const boundsRef = useRef({ topY: 1.0, radius: 0.6 });
+    const projectilePool = useRef(
+        Array.from({ length: 6 }, () => ({
+            mesh: null as THREE.Mesh | null,
+            velocity: new THREE.Vector3(),
+            life: 0,
+            active: false,
+        }))
+    );
+    const tmpDir = useMemo(() => new THREE.Vector3(), []);
+    const tmpQuat = useMemo(() => new THREE.Quaternion(), []);
+    const tmpPos = useMemo(() => new THREE.Vector3(), []);
+    const tmpWorld = useMemo(() => new THREE.Vector3(), []);
+    const fallbackDir = useMemo(() => new THREE.Vector3(0, 0.2, 1), []);
 
     const crownMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
         color: physics.color,
-        emissive: '#c7f6ff',
-        emissiveIntensity: 0.12,
-        metalness: 0.04,
+        emissive: '#000000',
+        emissiveIntensity: 0.0,
+        metalness: 0.0,
         roughness: 0.06,
-        transmission: 0.88,
-        thickness: 1.2,
-        clearcoat: 1,
-        clearcoatRoughness: 0.01,
-        ior: 2.05,
+        transmission: 0.92,
+        thickness: 1.6,
+        clearcoat: 0.9,
+        clearcoatRoughness: 0.04,
+        ior: 2.1,
         envMap: envMap || undefined,
-        envMapIntensity: envMap ? 2.6 : 0,
+        envMapIntensity: envMap ? 1.1 : 0,
         toneMapped: false,
     }), [envMap, physics.color]);
 
+    const projectileMaterial = useMemo(() => new THREE.MeshBasicMaterial({
+        color: '#ff0000',
+        toneMapped: false,
+    }), []);
+
     const crown = useMemo(() => {
         const root = new THREE.Group();
-        const ringCount = 8;
+        const diamond = SkeletonUtils.clone(scene);
+        const center = new THREE.Vector3();
+        diamondMeshesRef.current = [];
 
-        for (let i = 0; i < ringCount; i++) {
-            const angle = (i / ringCount) * Math.PI * 2;
-            const base = SkeletonUtils.clone(scene);
-            base.position.set(Math.cos(angle) * 0.52, 0.88, Math.sin(angle) * 0.52);
-            base.rotation.set(0, -angle + Math.PI * 0.5, 0);
-            base.scale.setScalar(0.17);
-            root.add(base);
-
-            const top = SkeletonUtils.clone(scene);
-            top.position.set(Math.cos(angle) * 0.62, 1.18, Math.sin(angle) * 0.62);
-            top.rotation.set(-Math.PI * 0.12, -angle, 0);
-            top.scale.setScalar(0.11 + (i % 2 === 0 ? 0.03 : 0));
-            root.add(top);
-        }
-
-        const center = SkeletonUtils.clone(scene);
-        center.position.set(0, 1.22, 0);
-        center.scale.setScalar(0.2);
-        root.add(center);
-
-        root.traverse((obj) => {
+        diamond.traverse((obj) => {
             if ((obj as THREE.Mesh).isMesh) {
                 const mesh = obj as THREE.Mesh;
+                const geom = (mesh.geometry as THREE.BufferGeometry).clone();
+                geom.computeBoundingBox();
+                const bbox = geom.boundingBox;
+                if (!bbox) return;
+                const meshCenter = bbox.getCenter(new THREE.Vector3());
+                center.copy(meshCenter);
+                const radius = Math.max(
+                    Math.abs(bbox.max.x - meshCenter.x),
+                    Math.abs(bbox.max.z - meshCenter.z)
+                ) * DIAMOND_SCALE;
+                boundsRef.current = {
+                    radius,
+                    topY: (bbox.max.y - meshCenter.y) * DIAMOND_SCALE + DIAMOND_Y,
+                };
+                const yMin = bbox.min.y;
+                const yMax = bbox.max.y;
+                const height = Math.max(0.0001, yMax - yMin);
+                const pos = geom.getAttribute('position') as THREE.BufferAttribute;
+                const basePositions = (pos.array as Float32Array).slice();
+                (mesh as any).userData.basePositions = basePositions;
+                (mesh as any).userData.bounds = { yMin, yMax, height };
+                mesh.geometry = geom;
                 mesh.castShadow = true;
                 mesh.receiveShadow = true;
                 mesh.material = crownMaterial;
+                diamondMeshesRef.current.push(mesh);
             }
         });
 
-        return root;
-    }, [scene, crownMaterial]);
+        diamond.scale.setScalar(DIAMOND_SCALE);
+        diamond.position.set(-center.x * DIAMOND_SCALE, -center.y * DIAMOND_SCALE, -center.z * DIAMOND_SCALE);
+        root.add(diamond);
 
-    useFrame((state) => {
+        return root;
+    }, [scene, crownMaterial, DIAMOND_SCALE, DIAMOND_Y]);
+
+    const spikeGeometry = useMemo(() => {
+        const baseGeom = new THREE.ConeGeometry(0.22, 1.1, 10, 4);
+        baseGeom.computeBoundingBox();
+        const bbox = baseGeom.boundingBox;
+        if (!bbox) return baseGeom;
+        const yMin = bbox.min.y;
+        const yMax = bbox.max.y;
+        const height = Math.max(0.0001, yMax - yMin);
+        const pos = baseGeom.getAttribute('position') as THREE.BufferAttribute;
+        const temp = new THREE.Vector3();
+
+        for (let i = 0; i < pos.count; i++) {
+            temp.fromBufferAttribute(pos, i);
+            const t = (temp.y - yMin) / height;
+            const angle = Math.atan2(temp.z, temp.x);
+            const wave = Math.cos(angle * SPIKE_COUNT);
+            const spike = Math.pow(Math.max(0, wave), 6.0);
+            const rNorm = Math.min(1, Math.sqrt(temp.x * temp.x + temp.z * temp.z) / 0.45);
+            const edgeT = smoothstep(0.5, 1.0, rNorm);
+            const tipT = smoothstep(0.6, 1.0, t);
+
+            const flare = 0.85 + (1 - t) * 0.35;
+            temp.x *= flare;
+            temp.z *= flare;
+            temp.y += spike * edgeT * tipT * 0.9 * height;
+            const collapse = smoothstep(0.7, 1.0, t);
+            temp.x *= collapse;
+            temp.z *= collapse;
+            pos.setXYZ(i, temp.x, temp.y, temp.z);
+        }
+
+        pos.needsUpdate = true;
+        baseGeom.computeVertexNormals();
+        baseGeom.computeBoundingBox();
+        if (baseGeom.boundingBox) {
+            baseGeom.translate(0, -baseGeom.boundingBox.min.y, 0);
+        }
+        return baseGeom;
+    }, [SPIKE_COUNT]);
+
+    useEffect(() => {
+        console.log('🔷 Diamond Crown Component Mounted');
+        console.log('🔷 projectileGroupRef:', projectileGroupRef.current);
+        console.log('🔷 spikeGeometry vertices:', spikeGeometry.attributes.position?.count);
+        console.log('🔷 projectileMaterial:', projectileMaterial);
+    }, [spikeGeometry, projectileMaterial]);
+
+    useFrame((state, delta) => {
         const et = state.clock.getElapsedTime();
         const timeSinceShot = timeSinceShotRef.current;
         const firePulse = timeSinceShot < 220 ? 1 - (timeSinceShot / 220) : 0;
+        const aim = diamondAimRef.current;
+        const hasTarget = aim.hasTarget;
+
+        if (timeSinceShot < 120 && prevShotRef.current >= 120) {
+            recoilRef.current = 1.0;
+            const spikeIndex = Math.floor(Math.random() * SPIKE_COUNT);
+            spikeCooldownRef.current[spikeIndex] = 1.0;
+
+            const angle = (spikeIndex / SPIKE_COUNT) * Math.PI * 2;
+            const radius = boundsRef.current.radius * 0.98;
+            const spawnPos = tmpPos.set(
+                Math.cos(angle) * radius,
+                boundsRef.current.topY,
+                Math.sin(angle) * radius
+            );
+            let parent = groupRef.current?.parent || null;
+            if (groupRef.current) {
+                tmpWorld.copy(spawnPos);
+                groupRef.current.localToWorld(tmpWorld);
+                if (parent) {
+                    parent.worldToLocal(tmpWorld);
+                }
+                spawnPos.copy(tmpWorld);
+            }
+
+            if (groupRef.current && parent) {
+                const targetWorld = tmpWorld.copy(hasTarget ? aim.localTarget : fallbackDir);
+                groupRef.current.localToWorld(targetWorld);
+                parent.worldToLocal(targetWorld);
+                tmpDir.copy(targetWorld).sub(spawnPos).normalize();
+            } else {
+                tmpDir.copy(hasTarget ? aim.localTarget : fallbackDir).sub(spawnPos).normalize();
+            }
+
+            const dir = tmpDir;
+            spawnPos.addScaledVector(dir, 0.25);
+
+            const proj = projectilePool.current.find(p => !p.active);
+            if (proj && proj.mesh) {
+                proj.active = true;
+                proj.life = 5.0;
+                proj.velocity.copy(dir).multiplyScalar(7.5);
+                proj.mesh.position.copy(spawnPos);
+                proj.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                proj.mesh.scale.set(1.5, 3.0, 1.5);
+                proj.mesh.visible = true;
+                console.log('🔴 DIAMOND PROJECTILE SPAWNED:', {
+                    spawnPos: spawnPos.toArray(),
+                    dir: dir.toArray(),
+                    meshPos: proj.mesh.position.toArray(),
+                    meshVisible: proj.mesh.visible,
+                    meshScale: proj.mesh.scale.toArray(),
+                });
+            }
+        }
+        prevShotRef.current = timeSinceShot;
 
         if (groupRef.current) {
-            groupRef.current.rotation.y = et * 0.26;
-            groupRef.current.position.y = 0.04 + Math.sin(et * 1.6) * 0.02;
+            const baseY = DIAMOND_Y + Math.sin(et * 1.1) * 0.08;
+            groupRef.current.position.set(0, baseY, 0);
+
+            if (hasTarget) {
+                const dir = tmpDir.copy(aim.localTarget).normalize();
+                const yaw = Math.atan2(dir.x, dir.z);
+                const pitch = Math.PI / 2;
+                groupRef.current.rotation.y = yaw;
+                groupRef.current.rotation.x = THREE.MathUtils.lerp(groupRef.current.rotation.x, pitch, 0.18);
+                groupRef.current.rotation.z = 0;
+                groupRef.current.position.y += 1.0;
+            } else {
+                groupRef.current.rotation.y = et * 0.3;
+                groupRef.current.rotation.z = Math.sin(et * 0.7) * 0.025;
+                groupRef.current.rotation.x = Math.cos(et * 0.5) * 0.015;
+            }
+
+            recoilRef.current = Math.max(0, recoilRef.current - delta * 4.2);
+            if (recoilRef.current > 0) {
+                const recoilDir = tmpDir.copy(hasTarget ? aim.localTarget : fallbackDir).normalize();
+                groupRef.current.position.addScaledVector(recoilDir, -0.28 * recoilRef.current);
+            }
             const pulseScale = 1 + firePulse * 0.14;
             groupRef.current.scale.setScalar(pulseScale);
         }
 
-        crownMaterial.emissiveIntensity = 0.12 + firePulse * 0.55 + Math.sin(et * 2.8) * 0.04;
+        crownMaterial.emissiveIntensity = 0.0;
+
+        for (let i = 0; i < SPIKE_COUNT; i++) {
+            spikeCooldownRef.current[i] = Math.max(0, spikeCooldownRef.current[i] - delta * 1.8);
+        }
+
+        for (const mesh of diamondMeshesRef.current) {
+            const basePositions = (mesh as any).userData.basePositions as Float32Array;
+            const bounds = (mesh as any).userData.bounds as { yMin: number; yMax: number; height: number };
+            if (!basePositions || !bounds) continue;
+            const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+            const yMin = bounds.yMin;
+            const height = bounds.height;
+            for (let i = 0; i < pos.count; i++) {
+                const ix = i * 3;
+                const x = basePositions[ix];
+                const y = basePositions[ix + 1];
+                const z = basePositions[ix + 2];
+                const t = (y - yMin) / height;
+                const angle = Math.atan2(z, x);
+                const wave = Math.cos(angle * SPIKE_COUNT);
+                const spike = Math.pow(Math.max(0, wave), 6.0);
+                const rNorm = Math.min(1, Math.sqrt(x * x + z * z) / (height * 0.7));
+                const edgeT = smoothstep(0.62, 1.0, rNorm);
+                const tipT = smoothstep(0.7, 1.0, t);
+                const spikeIndex = Math.floor(((angle + Math.PI) / (Math.PI * 2)) * SPIKE_COUNT) % SPIKE_COUNT;
+                const cooldown = spikeCooldownRef.current[spikeIndex] || 0;
+                const spikeScale = 1 - cooldown;
+                const yOffset = spike * edgeT * tipT * 2.0 * height * spikeScale;
+
+                pos.setXYZ(i, x, y + yOffset, z);
+            }
+            pos.needsUpdate = true;
+            mesh.geometry.computeVertexNormals();
+        }
+
+        for (const proj of projectilePool.current) {
+            if (!proj.active || !proj.mesh) continue;
+            proj.life -= delta;
+            if (proj.life <= 0) {
+                proj.active = false;
+                proj.mesh.visible = false;
+                console.log('🔷 Projectile expired at position:', proj.mesh.position.toArray());
+                continue;
+            }
+            console.log('🔷 Projectile active, pos:', proj.mesh.position.toArray(), 'vel:', proj.velocity.toArray(), 'visible:', proj.mesh.visible);
+            proj.mesh.position.addScaledVector(proj.velocity, delta);
+        }
     });
 
     return (
-        <group ref={groupRef}>
-            <primitive object={crown} />
-            <Sparkles
-                count={18}
-                scale={[2.0, 1.4, 2.0]}
-                size={3}
-                speed={0.4}
-                opacity={0.4}
-                color={physics.color}
-                position={[0, 1.0, 0]}
-            />
+        <group>
+            <group ref={groupRef}>
+                <primitive object={crown} />
+            </group>
+            <group ref={projectileGroupRef}>
+                {/* DEBUG: Static red sphere to test render pipeline */}
+                <mesh position={[0, 2, 0]}>
+                    <sphereGeometry args={[0.5]} />
+                    <meshBasicMaterial color="red" />
+                </mesh>
+                {projectilePool.current.map((p, idx) => (
+                    <mesh
+                        key={`diamond-spike-${idx}`}
+                        ref={(el) => {
+                            if (el && !p.mesh) {
+                                p.mesh = el;
+                                el.visible = false;
+                                el.frustumCulled = false;
+                                console.log(`🔷 Projectile mesh ${idx} ref assigned:`, el);
+                            }
+                        }}
+                        geometry={spikeGeometry}
+                        material={projectileMaterial}
+                    >
+                    </mesh>
+                ))}
+            </group>
         </group>
     );
 };
@@ -1426,7 +1656,8 @@ const GolemModel: React.FC<{
     isStonefish: boolean;
     envMap: THREE.Texture | null;
     stonefishAimRef: React.MutableRefObject<StonefishAimData>;
-}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, isStonefish, envMap, stonefishAimRef }) => {
+    diamondAimRef: React.MutableRefObject<DiamondAimData>;
+}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, isStonefish, envMap, stonefishAimRef, diamondAimRef }) => {
     const group = useRef<THREE.Group>(null);
     const modelContainer = useRef<THREE.Group>(null);
     const chestGlowRef = useRef<THREE.Mesh>(null);
@@ -1441,7 +1672,7 @@ const GolemModel: React.FC<{
 
     useLayoutEffect(() => {
         clone.traverse((obj) => {
-            if (obj.isBone) {
+            if ((obj as any).isBone) {
                 const name = obj.name.toLowerCase();
                 const bone = obj as THREE.Bone;
                 if (isOrbType) {
@@ -1657,6 +1888,7 @@ const GolemModel: React.FC<{
                 physics={physics}
                 envMap={envMap}
                 timeSinceShotRef={timeSinceShotRef}
+                diamondAimRef={diamondAimRef}
             />
         );
     }
@@ -1695,10 +1927,16 @@ const Tower: React.FC<{
     const lookTargetWorldRef = useRef(new THREE.Vector3());
     const currentLookRef = useRef(new THREE.Vector3());
     const stonefishLocalTargetRef = useRef(new THREE.Vector3());
+    const diamondLocalTargetRef = useRef(new THREE.Vector3());
     const stonefishAimRef = useRef<StonefishAimData>({
         hasTarget: false,
         localTarget: new THREE.Vector3(0, 0.45, 3.0),
         distanceGrid: 0,
+        targetId: null,
+    });
+    const diamondAimRef = useRef<DiamondAimData>({
+        hasTarget: false,
+        localTarget: new THREE.Vector3(0, 0.6, 3.0),
         targetId: null,
     });
     const quality = (cell.quality || GemQuality.CHIPPED) as GemQuality;
@@ -1741,15 +1979,26 @@ const Tower: React.FC<{
                         );
                         stonefishAimRef.current.targetId = target.id;
                     }
-                } else if (isStonefish) {
-                    stonefishAimRef.current.hasTarget = false;
-                    stonefishAimRef.current.targetId = null;
+                    const diamondLocal = diamondLocalTargetRef.current.set(tx, ty, tz);
+                    group.current.worldToLocal(diamondLocal);
+                    diamondAimRef.current.hasTarget = true;
+                    diamondAimRef.current.localTarget.copy(diamondLocal);
+                    diamondAimRef.current.targetId = target.id;
+                } else {
+                    if (isStonefish) {
+                        stonefishAimRef.current.hasTarget = false;
+                        stonefishAimRef.current.targetId = null;
+                    }
+                    diamondAimRef.current.hasTarget = false;
+                    diamondAimRef.current.targetId = null;
                 }
             } else {
                 if (isStonefish) {
                     stonefishAimRef.current.hasTarget = false;
                     stonefishAimRef.current.targetId = null;
                 }
+                diamondAimRef.current.hasTarget = false;
+                diamondAimRef.current.targetId = null;
                 if (!isSnakeType && !isStonefish) {
                      group.current.rotation.y = Math.sin(et * 0.5) * 0.2;
                 }
@@ -1770,6 +2019,7 @@ const Tower: React.FC<{
                 isStonefish={isStonefish}
                 envMap={envMap}
                 stonefishAimRef={stonefishAimRef}
+                diamondAimRef={diamondAimRef}
             />
         </group>
     );
