@@ -6,6 +6,7 @@ export const GRID_SIZE = 12; // Small map for development (was 32)
 export const CELL_SIZE = 1.0;
 export const BOARD_OFFSET_X = -(GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
 export const BOARD_OFFSET_Z = -(GRID_SIZE * CELL_SIZE) / 2 + CELL_SIZE / 2;
+export const PEDESTAL_HEIGHT = 0.5; // Elevation of the platform under each tower
 
 // Scale factor to convert Warcraft 3/Dota style units to Three.js grid units (Cell Size 1.0)
 // Assuming Range 100 ~ 2.5 Grid Cells

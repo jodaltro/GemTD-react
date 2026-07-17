@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(file /c/projetos/GemTD-react/public/glb/*.glb)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

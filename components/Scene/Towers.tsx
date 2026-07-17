@@ -2,7 +2,8 @@
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../../store/useGameStore';
-import { CellType, GEM_STATS, RANGE_SCALE, GEM_COLORS, GREEDY_CHANCE, GREEDY_BONUS_BASE, GemType, GemQuality } from '../../constants';
+import { CellType, GEM_STATS, RANGE_SCALE, GEM_COLORS, GREEDY_CHANCE, GREEDY_BONUS_BASE, GemType, PEDESTAL_HEIGHT } from '../../constants';
+import { ENEMY_GROUND_Y, ENEMY_FLYING_Y } from './projectiles/ProjectileEngine';
 import * as THREE from 'three';
 import { AQUAMARINE_PROJECTILE_VISUAL_DELAY_MS } from './attackTimings';
 
@@ -96,14 +97,17 @@ export const Towers: React.FC = () => {
                 ? 90
                 : (isOrb ? 50 : (isAquamarine ? AQUAMARINE_PROJECTILE_VISUAL_DELAY_MS : 200));
 
+            // Diamond manages its own projectile pool in DiamondCrown.tsx
+            if (tower.gemType === GemType.DIAMOND) return;
+
             setTimeout(() => {
                 let spawnX = tower.x;
                 let spawnZ = tower.y;
-                let spawnY = 0.5; 
+                let spawnY = PEDESTAL_HEIGHT + 0.5;
 
                 if (target) {
                     const dirX = target.x - tower.x;
-                    const dirZ = target.y - tower.y; 
+                    const dirZ = target.y - tower.y;
                     const len = Math.sqrt(dirX * dirX + dirZ * dirZ);
                     let fX = 0;
                     let fZ = 0;
@@ -113,43 +117,30 @@ export const Towers: React.FC = () => {
                         fZ = dirZ / len;
 
                         if (isSnake) {
-                            // Snake mouth position - spawn at mouth tip using same forward dir
                             const offsetForward = 0.38;
                             spawnX = tower.x + (fX * offsetForward);
                             spawnZ = tower.y + (fZ * offsetForward);
-                            spawnY = 0.55; // Lower to align with mouth, not the top glow
+                            spawnY = PEDESTAL_HEIGHT + 0.55;
                         } else if (isOrb) {
-                            // Floating Chest Center Spawn
-                            // Slightly forward to clear the mesh
-                            const offsetForward = 0.3; 
+                            const offsetForward = 0.3;
                             spawnX = tower.x + (fX * offsetForward);
                             spawnZ = tower.y + (fZ * offsetForward);
-                            spawnY = 1.2; // Chest Height
+                            spawnY = PEDESTAL_HEIGHT + 1.2;
                         } else {
-                            // Standard Golem (Right Hand approximation)
-                            // Right Vector (-fZ, fX)
                             const rX = -fZ;
                             const rZ = fX;
-                            const offsetRight = 0.45; 
-                            const offsetForward = 0.5; 
+                            const offsetRight = 0.45;
+                            const offsetForward = 0.5;
                             spawnX = tower.x + (rX * offsetRight) + (fX * offsetForward);
                             spawnZ = tower.y + (rZ * offsetRight) + (fZ * offsetForward);
-                            spawnY = 0.6; // Hand Height
+                            spawnY = PEDESTAL_HEIGHT + 0.6;
                         }
                     }
-                    
+
                     const spawnTime = clockRef.current;
 
-                    console.log('SNAKE_DEBUG_SPAWN', {
-                        impactDelay,
-                        timeSinceShotAtSpawn: Date.now() - now,
-                        spawn: { x: spawnX, y: spawnY, z: spawnZ },
-                        dir: { x: fX, z: fZ },
-                        tower: { x: tower.x, y: tower.y },
-                    });
-
                     const dirToTargetX = target.x - spawnX;
-                    const dirToTargetY = (target.isFlying ? 1.5 : 0.4) - spawnY;
+                    const dirToTargetY = (target.isFlying ? ENEMY_FLYING_Y : ENEMY_GROUND_Y) - spawnY;
                     const dirToTargetZ = target.y - spawnZ;
                     const dirMag = Math.max(Math.hypot(dirToTargetX, dirToTargetY, dirToTargetZ), 0.001);
 
