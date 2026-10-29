@@ -12,7 +12,7 @@ export type ProjectileStyle = 'CRYSTAL' | 'SPIKE' | 'METEOR' | 'ORB' | 'LIQUID' 
 
 export function getProjectileStyle(type: GemType): ProjectileStyle {
     switch (type) {
-        case GemType.DIAMOND:      return 'HIDDEN';
+        case GemType.DIAMOND:      // cluster usa o sistema global (era HIDDEN na era DiamondCrown)
         case GemType.PINK_DIAMOND:
         case GemType.TOPAZ:
         case GemType.SILVER:

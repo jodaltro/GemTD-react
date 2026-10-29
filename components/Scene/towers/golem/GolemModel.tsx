@@ -5,12 +5,13 @@ import { Sparkles, useGLTF, useAnimations } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import { GemMaterialConfig, StonefishAimData, DiamondAimData } from '../shared/types';
 import { buildGemMaterial, buildGlowMaterial } from '../shared/TowerEngine';
-import { GemType, GemQuality, QUALITY_VISUALS } from '../../../../constants';
+import { GemQuality, QUALITY_VISUALS } from '../../../../constants';
 import { Enemy, GridCell } from '../../../../types';
 import { ProceduralSnake } from '../snake/Snake';
 import { ProceduralStonefish } from '../stonefish/Stonefish';
-import { ProceduralDiamondCrown } from '../diamond/DiamondCrown';
 import { ProceduralRubyTower } from '../ruby/Ruby';
+import { GemClusterTower } from '../cluster/GemCluster';
+import { CrystalGolemTower } from '../crystalgolem/CrystalGolem';
 
 useGLTF.preload('/glb/golem_-_attack.glb');
 
@@ -24,10 +25,12 @@ export const GolemModel: React.FC<{
     isSnakeType: boolean;
     isStonefish: boolean;
     isRubyType: boolean;
+    isClusterType: boolean;
+    isCrystalGolemType: boolean;
     envMap: THREE.Texture | null;
     stonefishAimRef: React.MutableRefObject<StonefishAimData>;
     diamondAimRef: React.MutableRefObject<DiamondAimData>;
-}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, isStonefish, isRubyType, envMap, stonefishAimRef, diamondAimRef }) => {
+}> = ({ cell, enemies, isSelected, physics, visualConfig, isOrbType, isSnakeType, isStonefish, isRubyType, isClusterType, isCrystalGolemType, envMap, stonefishAimRef, diamondAimRef }) => {
     const group = useRef<THREE.Group>(null);
     const modelContainer = useRef<THREE.Group>(null);
     const chestGlowRef = useRef<THREE.Mesh>(null);
@@ -35,7 +38,6 @@ export const GolemModel: React.FC<{
     const spineRef = useRef<THREE.Bone | null>(null);
     const neckRef = useRef<THREE.Bone | null>(null);
     const headRef = useRef<THREE.Bone | null>(null);
-    const isDiamondCrown = cell.gemType === GemType.DIAMOND;
     const { scene, animations } = useGLTF('/glb/golem_-_attack.glb');
     const clone = useMemo(() => SkeletonUtils.clone(scene), [scene]);
     const { actions, names } = useAnimations(animations, clone);
@@ -89,7 +91,7 @@ export const GolemModel: React.FC<{
     }, [clone, physics, isOrbType, isSnakeType, isStonefish, envMap]);
 
     useEffect(() => {
-        if (isOrbType || isSnakeType || isStonefish || isRubyType) {
+        if (isOrbType || isSnakeType || isStonefish || isRubyType || isClusterType) {
             Object.values(actions).forEach(a => (a as THREE.AnimationAction | null)?.stop());
             return;
         }
@@ -110,7 +112,7 @@ export const GolemModel: React.FC<{
             if (idleAction) idleAction.reset().fadeIn(0.2).play();
             else { attackAction.reset().play(); attackAction.paused = true; attackAction.time = 0; }
         }
-    }, [cell.lastShot, actions, names, isOrbType, isSnakeType, isStonefish, isRubyType]);
+    }, [cell.lastShot, actions, names, isOrbType, isSnakeType, isStonefish, isRubyType, isClusterType]);
 
     useFrame((state) => {
         const et = state.clock.getElapsedTime();
@@ -155,9 +157,10 @@ export const GolemModel: React.FC<{
     });
 
     if (isRubyType) return <ProceduralRubyTower physics={physics} envMap={envMap} timeSinceShotRef={timeSinceShotRef} />;
+    if (isClusterType && cell.gemType) return <GemClusterTower gemType={cell.gemType} envMap={envMap} timeSinceShotRef={timeSinceShotRef} />;
+    if (isCrystalGolemType) return <CrystalGolemTower physics={physics} envMap={envMap} timeSinceShotRef={timeSinceShotRef} />;
     if (isSnakeType) return <ProceduralSnake physics={physics} envMap={envMap} timeSinceShotRef={timeSinceShotRef} />;
     if (isStonefish) return <ProceduralStonefish physics={physics} envMap={envMap} timeSinceShotRef={timeSinceShotRef} stonefishAimRef={stonefishAimRef} />;
-    if (isDiamondCrown) return <ProceduralDiamondCrown cell={cell} physics={physics} envMap={envMap} timeSinceShotRef={timeSinceShotRef} diamondAimRef={diamondAimRef} />;
 
     return (
         <group ref={group}>

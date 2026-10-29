@@ -51,6 +51,12 @@ export interface Enemy {
   isBoss: boolean;
   isFast: boolean;
   isImmune: boolean; // Magic Immune
+  isEvader?: boolean;   // 'Evasion' — chance to dodge projectiles
+  isRegen?: boolean;    // 'Regen' — regenerates HP after a delay out of combat
+  isEndgame?: boolean;  // 'Endgame' — ultra-tanky late-wave unit
+  evasionChance?: number;
+  regenPerSec?: number;
+  lastHitAt?: number;
   
   effects: StatusEffect[];
   stunnedUntil?: number;
@@ -70,6 +76,7 @@ export interface Projectile {
   targetId: string;
   damage: number;
   sourceType: GemType;
+  sourceCellId?: string; // Tower that fired (kill attribution)
   speed: number;
   color: string;
   isSplash: boolean;
@@ -128,7 +135,9 @@ export interface GameState {
   spawnEnemy: () => void;
   spawnProjectile: (projectile: Projectile) => void;
   removeProjectile: (id: string) => void;
-  damageEnemy: (id: string, damage: number, attackType: GemType, isSplash?: boolean) => void;
+  damageEnemy: (id: string, damage: number, attackType: GemType, isSplash?: boolean, sourceCellId?: string) => void;
+  dealPlainDamage: (id: string, amount: number) => void; // Magic DoT/aura — blocked by Magic Immune
+  spawnEffect: (x: number, y: number, type: VisualEffect['type'], color: string) => void;
   removeEnemy: (id: string) => void;
   damagePlayer: (amount: number) => void;
   completeWave: () => void;

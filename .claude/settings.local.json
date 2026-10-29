@@ -2,7 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(file /c/projetos/GemTD-react/public/glb/*.glb)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(py --version)",
+      "Bash(pip --version)",
+      "Read(//c/Users/Administrator/.pyenv/pyenv-win/versions/**)",
+      "Bash(py -0p)",
+      "Read(//c/Program Files/Python311/**)",
+      "Read(//c/Users/Administrator/AppData/Local/Programs/Python/Python311/**)",
+      "Bash(py -3.13 -m pip index versions bpy)",
+      "Bash(py -3.13 -m pip install bpy --dry-run)",
+      "Bash(py -3.13 -m ensurepip --upgrade)",
+      "Bash(py -3.13 -m pip install bpy)",
+      "Bash(py -3.13 -m pip install bpy --timeout 120 --retries 5)",
+      "Bash(py -3.13 -c \"import bpy; print\\('Blender', bpy.app.version_string\\)\")",
+      "Bash(mkdir -p \"/c/projetos/GemTD-react/.claude/skills/game-model-blender/scripts\" && echo ok)"
+    ],
+    "additionalDirectories": [
+      "C:\\projetos\\GemTD-react\\.claude\\skills\\game-model-blender"
     ]
   }
 }

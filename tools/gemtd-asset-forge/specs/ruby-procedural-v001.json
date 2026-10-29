@@ -1,0 +1,73 @@
+{
+  "$schema": "../gem-spec.schema.json",
+  "id": "ruby-procedural-v001",
+  "kind": "crystal-cluster",
+  "seed": 3281,
+  "quality": "hero",
+  "cluster": {
+    "primaryCrystal": {
+      "sides": 6,
+      "height": 1.7,
+      "radius": 0.27,
+      "tipSharpness": 0.9,
+      "tiltDegrees": [
+        7.0,
+        -10.0,
+        0.0
+      ]
+    },
+    "satellites": {
+      "count": 7,
+      "heightRange": [
+        0.42,
+        1.05
+      ],
+      "radiusRange": [
+        0.09,
+        0.19
+      ],
+      "spreadRadius": 0.58,
+      "tiltRangeDegrees": [
+        8.0,
+        28.0
+      ]
+    },
+    "baseRadius": 0.52
+  },
+  "material": {
+    "baseColor": "#c1122f",
+    "emissive": "#39000b",
+    "emissiveIntensity": 0.55,
+    "roughness": 0.2,
+    "metalness": 0.03,
+    "transmission": 0.08
+  },
+  "finish": {
+    "edgeRadius": 0.012,
+    "bevelSegments": 3,
+    "smoothAngleDegrees": 32
+  },
+  "surface": {
+    "mode": "sculpted",
+    "iterations": 2,
+    "strength": 0.09,
+    "preserveVolume": true
+  },
+  "texture": {
+    "resolution": 4096,
+    "pattern": "subtle internal crystalline veins",
+    "veinContrast": 0.35,
+    "normalStrength": 0.32
+  },
+  "vfx": {
+    "kind": "crystal-sparks",
+    "count": 96,
+    "radius": 0.85,
+    "speed": [0.15, 0.8],
+    "color": "#ff6b81"
+  },
+  "export": {
+    "targetTriangles": 75000,
+    "output": "out/ruby-procedural-v001/model.glb"
+  }
+}

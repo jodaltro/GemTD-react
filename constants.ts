@@ -22,10 +22,17 @@ export const DAMAGE_PENALTY = 0.8; // Reduced damage against wrong type
 
 // Economy & Lives
 export const STARTING_LIVES = 20;
-export const BOSS_DAMAGE = 20; // Instant game over for standard mode, or massive chunk
-export const STARTING_GOLD = 10000;
-export const GOLD_PER_KILL = 2;
-export const GOLD_PER_WAVE = 10;
+export const BOSS_DAMAGE = 20; // Leaking a boss is an instant loss
+export const STARTING_GOLD = 100;
+export const GOLD_PER_KILL = 3;
+export const GOLD_PER_WAVE = 15;
+
+// P0: Combat tuning
+export const CRIT_CHANCE = 0.25;                 // Diamond / Pink Diamond
+export const DODGE_CHANCE = 0.35;               // 'Evasion' enemies
+export const REGEN_DELAY_AFTER_HIT = 2.0;       // 'Regen' pauses after taking damage
+export const RADIATION_TICK_INTERVAL = 1.0;     // Uranium-238 area DoT interval (s)
+export const MAX_WAVE = 31;                     // Victory when completing this wave
 export const PRAY_COST_COLOR = 5;
 export const PRAY_COST_QUALITY = 15;
 
@@ -102,6 +109,8 @@ export enum GamePhase {
   SELECTING = 'SELECTING',   // Choosing 1 to keep
   READY = 'READY',           // Maze is set, ready to start wave
   DEFENDING = 'DEFENDING',   // Wave active, enemies moving
+  GAME_OVER = 'GAME_OVER',   // Lives reached 0
+  VICTORY = 'VICTORY',       // Completed all MAX_WAVE waves
 }
 
 // Visual Constants

@@ -1,0 +1,27 @@
+{
+  "$schema": "../gem-spec.schema.json",
+  "id": "stone-guardian-v001",
+  "kind": "organic-guardian",
+  "seed": 917263,
+  "quality": "hero",
+  "organic": {
+    "body": { "length": 2.1, "width": 1.0, "height": 1.18, "headScale": 0.68 },
+    "limbs": { "count": 4, "length": 1.15, "radius": 0.18, "stance": 0.70 },
+    "armor": { "plateCount": 36, "plateScale": 0.18, "spikeLength": 0.14 },
+    "tailLength": 1.05
+  },
+  "material": {
+    "rockColor": "#3d4552",
+    "baseColor": "#6e9db2",
+    "emissive": "#07141d",
+    "emissiveIntensity": 0.15,
+    "roughness": 0.46,
+    "metalness": 0.02,
+    "transmission": 0.0
+  },
+  "finish": { "edgeRadius": 0.008, "bevelSegments": 3, "smoothAngleDegrees": 42 },
+  "surface": { "mode": "sculpted", "iterations": 2, "strength": 0.065, "preserveVolume": true },
+  "texture": { "resolution": 4096, "pattern": "layered hide, scale boundaries and worn armor plates", "veinContrast": 0.35, "normalStrength": 0.62 },
+  "vfx": { "kind": "guardian-dust-and-embers", "count": 48, "radius": 1.2, "speed": [0.05, 0.34], "color": "#89d8ff" },
+  "export": { "targetTriangles": 180000, "output": "out/stone-guardian-v001/model.glb" }
+}

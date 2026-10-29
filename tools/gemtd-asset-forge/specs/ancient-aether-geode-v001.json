@@ -1,0 +1,51 @@
+{
+  "$schema": "../gem-spec.schema.json",
+  "id": "ancient-aether-geode-v001",
+  "kind": "geode-egg",
+  "seed": 723941,
+  "quality": "hero",
+  "geode": {
+    "radius": 0.9,
+    "height": 2.12,
+    "coreRadius": 0.48,
+    "coreHeight": 0.42,
+    "loosePlates": 0
+  },
+  "material": {
+    "rockColor": "#5d564e",
+    "baseColor": "#8fdef4",
+    "emissive": "#bdf7ff",
+    "emissiveIntensity": 1.35,
+    "roughness": 0.26,
+    "metalness": 0.02,
+    "transmission": 0.18
+  },
+  "finish": {
+    "edgeRadius": 0.009,
+    "bevelSegments": 3,
+    "smoothAngleDegrees": 38
+  },
+  "surface": {
+    "mode": "sculpted",
+    "iterations": 2,
+    "strength": 0.075,
+    "preserveVolume": true
+  },
+  "texture": {
+    "resolution": 4096,
+    "pattern": "weathered mineral strata around a luminous ice-blue geode cavity",
+    "veinContrast": 0.42,
+    "normalStrength": 0.55
+  },
+  "vfx": {
+    "kind": "aether-motes-and-wisps",
+    "count": 164,
+    "radius": 1.12,
+    "speed": [0.08, 0.48],
+    "color": "#bdf7ff"
+  },
+  "export": {
+    "targetTriangles": 100000,
+    "output": "out/ancient-aether-geode-v001/model.glb"
+  }
+}

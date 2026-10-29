@@ -30,18 +30,30 @@ export const GEM_PHYSICS: Record<GemType, GemMaterialConfig> = {
 };
 
 export const ORB_TYPES = [
-    GemType.AMETHYST, GemType.OPAL, GemType.BLACK_OPAL,
-    GemType.URANIUM_238, GemType.TOURMALINE,
+    GemType.BLACK_OPAL, GemType.URANIUM_238, GemType.TOURMALINE,
 ];
 
 export const SNAKE_TYPES = [
-    GemType.EMERALD, GemType.DARK_EMERALD,
+    GemType.DARK_EMERALD,
 ];
 
-export const STONEFISH_TYPES = [
-    GemType.AQUAMARINE,
-];
+// Vazio desde que Aquamarine virou cluster — Stonefish mantido para gemas futuras
+export const STONEFISH_TYPES: GemType[] = [];
 
 export const RUBY_TYPES = [
     GemType.RUBY,
+];
+
+// Gemas com modelo próprio de cluster de cristais (estilo do Ruby),
+// renderizadas por cluster/GemCluster.tsx com config em CLUSTER_CONFIG.
+// GOLD entrou como gema de cluster (cluster dourado "Sol do Rei", gold.glb).
+export const CLUSTER_TYPES = [
+    GemType.SAPPHIRE, GemType.TOPAZ, GemType.AMETHYST, GemType.OPAL,
+    GemType.EMERALD, GemType.AQUAMARINE, GemType.GOLD,
+];
+
+// Gemas que usam o modelo de Crystal Golem (elemental de cristal chibi),
+// renderizadas por crystalgolem/CrystalGolem.tsx. DIAMOND virou golem (crystal_golem.glb).
+export const CRYSTAL_GOLEM_TYPES = [
+    GemType.DIAMOND,
 ];

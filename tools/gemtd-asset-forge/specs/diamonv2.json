@@ -1,0 +1,49 @@
+{
+  "$schema": "../gem-spec.schema.json",
+  "id": "diamonv2",
+  "kind": "crystal-cluster",
+  "seed": 92341,
+  "quality": "hero",
+  "cluster": {
+    "primaryCrystal": {
+      "sides": 8,
+      "height": 1.75,
+      "radius": 0.68,
+      "tipSharpness": 0.58,
+      "tiltDegrees": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "satellites": {
+      "count": 4,
+      "heightRange": [
+        0.18,
+        0.32
+      ],
+      "radiusRange": [
+        0.1,
+        0.16
+      ],
+      "spreadRadius": 0.52,
+      "tiltRangeDegrees": [
+        25.0,
+        50
+      ]
+    },
+    "baseRadius": 0.62
+  },
+  "material": {
+    "baseColor": "#b4ada3",
+    "emissive": "#a8eeff",
+    "emissiveIntensity": 1.6,
+    "roughness": 0.38,
+    "metalness": 0.08,
+    "transmission": 0.45
+  },
+  "export": {
+    "targetTriangles": 75000,
+    "output": "out/diamonv2.glb"
+  }
+}

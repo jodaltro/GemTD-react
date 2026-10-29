@@ -5,6 +5,7 @@ import { useFrame } from '@react-three/fiber';
 import { useGameStore } from '../../store/useGameStore';
 import { CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Z } from '../../constants';
 import { GemType } from '../../constants';
+import { Enemy } from '../../types';
 import {
     getProjectileStyle,
     crystalGeo, spikeGeo, meteorGeo, orbGeo, liquidGeo, dropletGeo, cometGeo,
@@ -14,6 +15,9 @@ import {
 
 const tempObj = new THREE.Object3D();
 const tempColor = new THREE.Color();
+
+// P0: 'Evasion' enemies have a chance to dodge projectiles entirely
+const dodgeRoll = (enemy: Enemy): boolean => !!enemy.evasionChance && Math.random() < enemy.evasionChance;
 
 export const Projectiles: React.FC = () => {
   const crystalRef  = useRef<THREE.InstancedMesh>(null);
@@ -28,6 +32,7 @@ export const Projectiles: React.FC = () => {
   const enemies        = useGameStore((state) => state.enemies);
   const damageEnemy    = useGameStore((state) => state.damageEnemy);
   const removeProjectile = useGameStore((state) => state.removeProjectile);
+  const spawnEffect    = useGameStore((state) => state.spawnEffect);
 
   const materials = useMemo(() => createProjectileMaterials(), []);
 
@@ -63,15 +68,20 @@ export const Projectiles: React.FC = () => {
 
       // ── Hit detection ──────────────────────────────────────────────────────
       if (dist < hitRadius) {
-        damageEnemy(proj.targetId, proj.damage, proj.sourceType, false);
-        if (proj.isSplash) {
-          enemies.forEach(e => {
-            if (e.id === target.id || e.isDead) return;
-            const d2 = Math.sqrt(Math.pow(e.x - target.x, 2) + Math.pow(e.y - target.y, 2));
-            if (d2 < (proj.splashRadius || 1.5)) {
-              damageEnemy(e.id, proj.damage * 0.5, proj.sourceType, true);
-            }
-          });
+        if (!dodgeRoll(target)) {
+          damageEnemy(proj.targetId, proj.damage, proj.sourceType, false, proj.sourceCellId);
+          if (proj.isSplash) {
+            enemies.forEach(e => {
+              if (e.id === target.id || e.isDead) return;
+              const d2 = Math.sqrt(Math.pow(e.x - target.x, 2) + Math.pow(e.y - target.y, 2));
+              if (d2 < (proj.splashRadius || 1.5)) {
+                damageEnemy(e.id, proj.damage * 0.5, proj.sourceType, true, proj.sourceCellId);
+              }
+            });
+          }
+        } else {
+          // Dodged — brief white flash so the miss reads clearly
+          spawnEffect(target.x, target.y, 'HIT', '#f1f5f9');
         }
         removeProjectile(proj.id);
         continue;
@@ -143,15 +153,19 @@ export const Projectiles: React.FC = () => {
         const missDist = Math.hypot(target.x - cx, enemyHeight - cy, target.y - cz);
 
         if (missDist < hitRadius) {
-          damageEnemy(proj.targetId, proj.damage, proj.sourceType, false);
-          if (proj.isSplash) {
-            enemies.forEach(e => {
-              if (e.id === target.id || e.isDead) return;
-              const d2 = Math.sqrt(Math.pow(e.x - target.x, 2) + Math.pow(e.y - target.y, 2));
-              if (d2 < (proj.splashRadius || 1.5)) {
-                damageEnemy(e.id, proj.damage * 0.5, proj.sourceType, true);
-              }
-            });
+          if (!dodgeRoll(target)) {
+            damageEnemy(proj.targetId, proj.damage, proj.sourceType, false, proj.sourceCellId);
+            if (proj.isSplash) {
+              enemies.forEach(e => {
+                if (e.id === target.id || e.isDead) return;
+                const d2 = Math.sqrt(Math.pow(e.x - target.x, 2) + Math.pow(e.y - target.y, 2));
+                if (d2 < (proj.splashRadius || 1.5)) {
+                  damageEnemy(e.id, proj.damage * 0.5, proj.sourceType, true, proj.sourceCellId);
+                }
+              });
+            }
+          } else {
+            spawnEffect(target.x, target.y, 'HIT', '#f1f5f9');
           }
           removeProjectile(proj.id);
           continue;

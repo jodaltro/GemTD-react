@@ -4,7 +4,7 @@ import { useFrame } from '@react-three/fiber';
 import { GemType, GemQuality, QUALITY_VISUALS, CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Z, PEDESTAL_HEIGHT } from '../../../constants';
 import { Enemy, GridCell } from '../../../types';
 import { StonefishAimData, DiamondAimData } from './shared/types';
-import { GEM_PHYSICS, DEFAULT_GEM_PHYSICS, ORB_TYPES, SNAKE_TYPES, STONEFISH_TYPES, RUBY_TYPES } from './shared/gemConfig';
+import { GEM_PHYSICS, DEFAULT_GEM_PHYSICS, ORB_TYPES, SNAKE_TYPES, STONEFISH_TYPES, RUBY_TYPES, CLUSTER_TYPES, CRYSTAL_GOLEM_TYPES } from './shared/gemConfig';
 import { GolemModel } from './golem/GolemModel';
 
 export const Tower: React.FC<{
@@ -37,6 +37,11 @@ export const Tower: React.FC<{
     const isSnakeType = cell.gemType ? SNAKE_TYPES.includes(cell.gemType)     : false;
     const isStonefish = cell.gemType ? STONEFISH_TYPES.includes(cell.gemType) : false;
     const isRubyType  = cell.gemType ? RUBY_TYPES.includes(cell.gemType)      : false;
+    // The game has no independent tower-level field. CHIPPED is its first
+    // visual tier, so the carved geode is Diamond's level-1 presentation.
+    const isDiamondLevelOne = cell.gemType === GemType.DIAMOND && quality === GemQuality.CHIPPED;
+    const isClusterType = cell.gemType ? CLUSTER_TYPES.includes(cell.gemType) || isDiamondLevelOne : false;
+    const isCrystalGolemType = cell.gemType ? CRYSTAL_GOLEM_TYPES.includes(cell.gemType) && !isDiamondLevelOne : false;
 
     useFrame((state) => {
         const et = state.clock.getElapsedTime();
@@ -93,7 +98,7 @@ export const Tower: React.FC<{
             <GolemModel
                 cell={cell} enemies={enemies} isSelected={isSelected}
                 physics={physics} visualConfig={visualConfig}
-                isOrbType={isOrbType} isSnakeType={isSnakeType} isStonefish={isStonefish} isRubyType={isRubyType}
+                isOrbType={isOrbType} isSnakeType={isSnakeType} isStonefish={isStonefish} isRubyType={isRubyType} isClusterType={isClusterType} isCrystalGolemType={isCrystalGolemType}
                 envMap={envMap} stonefishAimRef={stonefishAimRef} diamondAimRef={diamondAimRef}
             />
         </group>

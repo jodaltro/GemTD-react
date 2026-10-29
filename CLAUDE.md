@@ -38,18 +38,20 @@ Tower Defense 3D inspirado no clássico Gem TD (Warcraft 3). Mecânica central: 
 | `components/Scene/towers/DiamondEngine.ts` | Shim legado — re-exporta tudo de `shared/TowerEngine.ts` |
 | `components/Scene/towers/shared/TowerEngine.ts` | **Engine GPU de torres**: materiais PBR, shader injection, pool instanced — usado por todos os archetypes |
 | `components/Scene/towers/shared/types.ts` | `GemMaterialConfig`, `StonefishAimData`, `DiamondAimData`, `smoothstep` |
-| `components/Scene/towers/shared/gemConfig.ts` | `GEM_PHYSICS`, `ORB_TYPES`, `SNAKE_TYPES`, `STONEFISH_TYPES`, `RUBY_TYPES` |
-| `components/Scene/towers/golem/GolemModel.tsx` | Renderiza GLB golem + branch para Snake/Stonefish/Diamond/Ruby |
-| `components/Scene/towers/diamond/DiamondCrown.tsx` | Modelo Diamond: `diamond.glb` + GPU vertex deform + magazine de spikes + pool instanced própria |
+| `components/Scene/towers/shared/gemConfig.ts` | `GEM_PHYSICS`, `ORB_TYPES`, `SNAKE_TYPES`, `STONEFISH_TYPES`, `RUBY_TYPES`, `CLUSTER_TYPES` |
+| `components/Scene/towers/golem/GolemModel.tsx` | Renderiza GLB golem + branch para Ruby/Cluster/Snake |
+| `components/Scene/towers/diamond/DiamondCrown.tsx` | **Aposentado** (fora do render path): magazine de spikes + pool própria — referência para pools custom |
 | `components/Scene/towers/ruby/Ruby.tsx` | Modelo Ruby: `ruby.glb` (cluster de cristais) + pulso emissivo + recoil |
-| `components/Scene/towers/snake/Snake.tsx` | Animação de cobra para Emerald/Dark Emerald |
-| `components/Scene/towers/stonefish/Stonefish.tsx` | Animação para Aquamarine |
+| `components/Scene/towers/cluster/GemCluster.tsx` | Clusters das demais gemas lvl 1 (Diamond/Emerald/Sapphire/Amethyst/Topaz/Aquamarine/Opal) — config por gema em `CLUSTER_CONFIG` |
+| `components/Scene/towers/snake/Snake.tsx` | Animação de cobra para Dark Emerald |
+| `components/Scene/towers/stonefish/Stonefish.tsx` | **Aposentado** (`STONEFISH_TYPES` vazio) |
 | `components/UI/Interface.tsx` | HUD completo: stats, botões, receitas, prayer modal |
 
 ### Assets GLB (em `public/glb/`)
-- `golem_-_attack.glb` — modelo base de todas as torres (skeleton animado)
-- `diamond.glb` — modelo usado pelo DiamondCrown
+- `golem_-_attack.glb` — modelo base das torres default (skeleton animado)
 - `ruby.glb` — cluster de cristais procedural usado pelo Ruby (gerado via skill game-model-gen)
+- `sapphire.glb` / `topaz.glb` / `amethyst.glb` / `opal.glb` / `diamond_cluster.glb` / `emerald.glb` / `aquamarine.glb` — clusters procedurais usados pelo GemCluster (mesma origem)
+- `diamond.glb` — legado (era do DiamondCrown, aposentado)
 - `snake.glb` — (presente mas Snake usa o golem com bone manipulation)
 
 ---
@@ -115,12 +117,13 @@ Structures.tsx
   └── towers/Tower.tsx (por torre ativa no grid, posicionada em Y = PEDESTAL_HEIGHT)
         ├── refs de mira: stonefishAimRef, diamondAimRef
         └── towers/golem/GolemModel.tsx
-              ├── [Diamond]   → towers/diamond/DiamondCrown.tsx (diamond.glb + vertex deform + pool própria)
               ├── [Ruby]      → towers/ruby/Ruby.tsx (early-return, ruby.glb + pulso emissivo)
-              ├── [Snake]     → towers/snake/Snake.tsx (early-return, geom procedural)
-              ├── [Stonefish] → towers/stonefish/Stonefish.tsx (early-return, geom procedural)
+              ├── [Cluster]   → towers/cluster/GemCluster.tsx (todas as 8 gemas lvl 1 exceto Ruby, config-driven)
+              ├── [Snake]     → towers/snake/Snake.tsx (early-return, geom procedural — só Dark Emerald)
               └── [default]   → Golem GLB animado com bone manipulation
 ```
+
+Aposentados (arquivos mantidos, fora do render path): `diamond/DiamondCrown.tsx` (magazine de spikes) e `stonefish/Stonefish.tsx` (`STONEFISH_TYPES` vazio).
 
 **Convenção de pasta por archetype** (`towers/<archetype>/`):
 - `<Archetype>.tsx` — modelo 3D + animação
@@ -131,28 +134,27 @@ Structures.tsx
 
 | Archetype | Gem Types | Técnica |
 |---|---|---|
-| **Golem** (default) | Sapphire, Topaz, Gold… | GLB padrão com attack animation |
-| **DiamondCrown** | Diamond | `diamond.glb` + GPU vertex deform + magazine de spikes + pool instanced |
+| **Golem** (default) | Gold, Silver, Jade, Star Ruby… | GLB padrão com attack animation |
 | **Ruby** | Ruby | `ruby.glb` (cluster de cristais na rocha) + pulso emissivo + flash/recoil no disparo |
-| **Orb** | Amethyst, Opal, Black Opal, Uranium, Tourmaline | Esconde membros, head/spine reescalados → floating chest |
-| **Snake** | Emerald, Dark Emerald | Procedural: early-return do GolemModel, ProceduralSnake |
-| **Stonefish** | Aquamarine | Fully procedural: LatheGeometry pear-shaped + Catmull-Rom tendrils |
+| **GemCluster** | Diamond, Emerald, Sapphire, Amethyst, Topaz, Aquamarine, Opal | GLB de cluster por gema + flavor de animação, nós flutuantes animados em runtime |
+| **Orb** | Black Opal, Uranium, Tourmaline | Esconde membros, head/spine reescalados → floating chest |
+| **Snake** | Dark Emerald | Procedural: early-return do GolemModel, ProceduralSnake |
+| ~~DiamondCrown~~ (aposentado) | — | `diamond.glb` + magazine de spikes + pool própria; código mantido em `diamond/` |
+| ~~Stonefish~~ (aposentado) | — | LatheGeometry + tendrils; código mantido em `stonefish/`, `STONEFISH_TYPES` vazio |
 
-### Diamond Crown — mecânica de magazine de spikes
-- 5 spikes ficam estendidas; disparam **sequencialmente** (round-robin, não aleatório)
-- Cada spike disparada **fica retraída** (não cresce de volta individualmente)
-- Quando todas as 5 são gastas → **reload** inicia (1,2 s), crown pulsa azul claro
-- Após reload, **todas as 5 crescem simultaneamente** (efeito "burst")
-- Estado: `spikeAmmoRef` (boolean[5]), `reloadingRef`, `reloadTimerRef`, `nextSpikeRef`
-- Regra de cooldown: `ammo[i]=false` mantém `cooldown[i]=1.0` (spike fica flat); decay só ocorre quando `ammo[i]=true`
+### GemCluster — flavors de animação (`CLUSTER_CONFIG` em `cluster/GemCluster.tsx`)
 
-### Aquamarine (ProceduralStonefish) — detalhes
-- Body: `LatheGeometry` (perfil gota/pera), `rotation={[Math.PI,0,0]}` (ponta pra baixo)
-- Material: via `buildGemMaterial`, transmission 0.7, ior 1.65, sheen ciano
-- Float: `y = 1.2 + sin(t*1.1)*0.1`, sway suave
-- Attack: lunge no z-axis em 400ms (20% in, 80% ease-out)
-- Water tendrils: 4 tendrils × 14 esferas por Catmull-Rom splines com animação senoidal
-- Water droplets: 16 orbitando com escala elipsoidal pulsante
+| Gema | Flavor | Tema de fantasia | Efeito |
+|---|---|---|---|
+| Sapphire | ICE | Coroa da Rainha do Gelo | Pulso lento e frio |
+| Topaz | STORM | Sol dos Anões | Flicker crepitante de relâmpago |
+| Amethyst | ARCANE | Círculo Arcano da Feiticeira | Gema central levita e gira (`AmethystFloat`) |
+| Opal | MOON | Ovos de Dragão ao Luar | Shimmer de matiz iridescente + fogo-fátuo orbitando (`OpalWisp`) |
+| Diamond | PRISM | Coroa do Rei da Montanha | Glints com matiz arco-íris ciclando |
+| Emerald | FOREST | Coração da Floresta Encantada | Respiração vegetal + vagalume piscando (`EmeraldFirefly`) |
+| Aquamarine | TIDE | Lágrima da Sereia | Pulso de marés + lágrima levitando (`AquaTear`) |
+
+Todos compartilham: recoil no disparo, respiração de escala, flash de `pointLight`, Sparkles temáticos. Projéteis via sistema global (spawn `PEDESTAL_HEIGHT + 0.75`, delay 120 ms).
 
 ### Adicionando novo archetype visual
 1. Criar pasta `towers/<archetype>/` com `<Archetype>.tsx` (modelo) e opcionalmente `<Archetype>Projectile.tsx`
@@ -161,7 +163,8 @@ Structures.tsx
 4. Procedural puro: criar componente em `towers/<archetype>/`, early-return em `golem/GolemModel.tsx`
 5. Baseado no golem: adicionar bone manipulation em `GolemModel.useLayoutEffect`
 6. Usar `buildGemMaterial` / `buildGlowMaterial` de `shared/TowerEngine` para materiais
-7. Diamond é o padrão de referência: projétil com pool própria em `diamond/DiamondCrown.tsx`, skip do `spawnProjectile` em `Towers.tsx`, dano aplicado diretamente via `useGameStore.getState().damageEnemy`
+7. Para gema com visual de cluster de cristais: **não criar componente novo** — gerar GLB (skill game-model-gen), adicionar entry em `CLUSTER_CONFIG` e incluir em `CLUSTER_TYPES`
+8. Referência para pool de projéteis própria (fora do sistema global): `diamond/DiamondCrown.tsx` (aposentado mas funcional) — skip do `spawnProjectile` em `Towers.tsx`, dano direto via `useGameStore.getState().damageEnemy`
 
 ---
 
@@ -260,6 +263,7 @@ createProjectileMaterials(): ProjectileMaterials
 | Golem (default) | `PEDESTAL_HEIGHT + 0.6` = 1.1 |
 | Snake | `PEDESTAL_HEIGHT + 0.55` = 1.05 |
 | Orb | `PEDESTAL_HEIGHT + 1.2` = 1.7 |
+| Cluster (todas as lvl 1 exceto Ruby) | `PEDESTAL_HEIGHT + 0.75` = 1.25 |
 
 ---
 
@@ -295,7 +299,7 @@ Ao ser craftado, aplica `damageMultiplier += 0.4` em todas as torres no raio. Im
 
 ## Fluxo de Ataque (ponta a ponta)
 
-**Torres comuns (Golem, Snake, Stonefish, Orb):**
+**Todas as torres (Golem, Ruby, Cluster, Snake, Orb):**
 1. `Towers.tsx/useFrame` — verifica `now >= lastShot + cooldown`
 2. Encontra alvo mais próximo no range
 3. Chama `updateTowerCooldown()` + `setTimeout(impactDelay, () => spawnProjectile(...))`
@@ -304,11 +308,7 @@ Ao ser craftado, aplica `damageMultiplier += 0.4` em todas as torres no raio. Im
 6. `damageEnemy` calcula `typeMultiplier × armorMultiplier × damageMultiplier`, aplica status effects, gera `lastEffect` HIT, marca `isDead` se HP ≤ 0
 7. `Enemies.tsx` anima morte (shrink + spin 0.5s), então `removeEnemy()`
 
-**Diamond (pool própria):**
-1. `Towers.tsx/useFrame` — verifica cooldown, chama `updateTowerCooldown()`, **não chama** `spawnProjectile` (skip via guard)
-2. `timeSinceShotRef` em `GolemModel.tsx` detecta `cell.lastShot` atualizado → alimenta `DiamondCrown.tsx`
-3. `DiamondCrown.tsx/useFrame` — detecta `timeSinceShot < 120ms`, aciona spike round-robin, spawna projétil na pool interna
-4. Pool interna (world space): homing physics, ao atingir chama `useGameStore.getState().damageEnemy()` diretamente
+(Na era DiamondCrown o Diamond tinha pool própria com skip do `spawnProjectile`; hoje todas as gemas usam o fluxo acima.)
 
 ---
 
@@ -324,4 +324,34 @@ Ao ser craftado, aplica `damageMultiplier += 0.4` em todas as torres no raio. Im
 - Hardcodar `0.4` / `1.5` como altura Y de inimigos → usar `ENEMY_GROUND_Y` / `ENEMY_FLYING_Y` do `ProjectileEngine`
 - Hardcodar altura Y de spawn de projétil → sempre `PEDESTAL_HEIGHT + offset_relativo_do_modelo`
 - Importar de `towers/TowerEngine.ts`, `towers/types.ts` ou `towers/gemConfig.ts` (caminhos antigos removidos) → usar `towers/shared/TowerEngine.ts`, `towers/shared/types.ts`, `towers/shared/gemConfig.ts`
-- Chamar `spawnProjectile` no store para Diamond → Diamond gerencia pool própria em `diamond/DiamondCrown.tsx`
+- Criar componente novo para gema com visual de cluster de cristais → adicionar entry em `CLUSTER_CONFIG` + `CLUSTER_TYPES` (GemCluster é config-driven)
+
+---
+
+## P0 — Mecânicas Implementadas (14/mai)
+
+Implementado o plano P0 (correções que destravam profundidade). Fechar o gap "especial escrito ≠ implementado":
+
+1. **Poison DoT de verdade** — efeito POISON agora causa dano mágico por tick (acumulador em `Enemies.tsx`, `store.dealPlainDamage`). Bloqueado por `Magic Immune`.
+2. **Crit real** — Diamond / Pink Diamond rolam `CRIT_CHANCE (0.25)` × `specialValue` (Pink 3.5×). Em `Towers.tsx`.
+3. **Multishot real** — Topaz (`N Targets`), Ruby Great (`Multi-Shot (3)`), Malachite (`Multi-Poison` → 3). `Towers.tsx` seleciona N alvos distintos.
+4. **Aura AS da Opal** — torres na `range` da Opal ganham redução de cooldown (`specialValue%`, stacking, min 35%). `Towers.tsx` → `cooldownMult`.
+5. **Star Ruby** — mata atribuída via `sourceCellId` no projétil; dano escala +5% por kill.
+6. **Blood Stone (Bombardment)** — splash radius 3.0 (explosão de área). **Uranium-238** mantém slow no hit (aura de radiação por tick fica como evolução futura).
+7. **Habilidades de onda honestas**: `Evasion` (dodge 35% em `Projectiles.tsx`, flash branco), `Regen` (cura após 2s sem levar dano), `Endgame` (HP×3, armor alta, immune), `Magic Immune` (bloqueia dano mágico DoT/aura e status).
+8. **Game over / Vitória** — `GamePhase.GAME_OVER` e `VICTORY`; modal com restart (`Interface.tsx`). Vitória ao completar `MAX_WAVE = 31`.
+9. **Economia recalibrada** — `STARTING_GOLD = 100`, `GOLD_PER_KILL = 3`, `GOLD_PER_WAVE = 15`.
+
+### Modelos 3D de inimigos (create-3d-model / Blender)
+
+- **`public/glb/enemies.glb`** — 7 arquétipos (uma mesh cada, para `InstancedMesh`): `Enemy_Creep/Evader/Regen/MagImmune/Flyer/Boss/Endgame` (nome por habilidade).
+- `Enemies.tsx` carrega o GLB com fallback pro torus-knot; cada arquétipo tem **animação procedural** distinta (spin, pulso, bob de voo, jitter de esquiva, respiração de regen — tudo em `useFrame`, fiel ao pattern InstancedMesh).
+- Slime overlay segue instanciado (indexado pelo índice do inimigo, não por arquétipo).
+- Fonte editável: `artifacts/enemies-models/enemies-v010.blend` (v001→v010). Remodelagem profissional: low-poly stylized + flat shading + cristais facetados + anéis emissivos; silhueta distinta por arquétipo.
+- modelo do subagente sem visão não confirmou percepção final: QA estrutural + métricas de silhueta; revalidar visualmente num passe com modelo vision-capable quando possível.
+
+### Exemplo: adicionar novo arquétipo de inimigo
+
+1. Blender: criar mesh `Enemy_<Nome>` em `enemies-v00X.blend`, reexportar `enemies.glb` se necessário.
+2. `Enemies.tsx`: adicionar arch a `ARCHES`/tipo, mapear nome no traverse, animar em `useFrame` (rot/spin/pulse/bob).
+3. Store: setar flag na habilidade em `spawnEnemy`;`archFor` prioriza boss > endgame > evader > regen > mag > flyer > creep.

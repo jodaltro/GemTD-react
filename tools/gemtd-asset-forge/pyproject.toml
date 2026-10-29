@@ -1,0 +1,13 @@
+[project]
+name = "gemtd-asset-forge"
+version = "0.1.0"
+description = "Offline procedural GLB generator for GemTD assets"
+requires-python = ">=3.11"
+
+[project.scripts]
+asset-forge = "asset_forge.generate:main"
+asset-forge-validate = "asset_forge.validate:main"
+asset-forge-studio = "asset_forge.studio:main"
+
+[tool.ruff]
+line-length = 100

@@ -4,7 +4,7 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 
 export const Effects: React.FC = () => {
   return (
-    <EffectComposer disableNormalPass>
+    <EffectComposer enableNormalPass={false}>
       {/* 
          Bloom settings optimized for MeshRefractionMaterial:
          - luminanceThreshold: 1.0 (Only values > 1.0 glow, requiring toneMapped={false} on mats)

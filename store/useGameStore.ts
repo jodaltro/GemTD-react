@@ -1,7 +1,7 @@
 
 import { create } from 'zustand';
-import { GRID_SIZE, CellType, GemType, GamePhase, START_POS, END_POS, GEM_COLORS, RECIPES, RANGE_SCALE, SPAWN_PROBABILITIES, QUALITY_ORDER, HP_BASE, HP_GROWTH_FACTOR, GET_WAVE_DATA, DAMAGE_MULTIPLIERS, DAMAGE_PENALTY, GEM_SPECIAL_EFFECTS, ARMOR_REDUCTION_FACTOR, NEGATIVE_ARMOR_FACTOR, STUN_COOLDOWN, STARTING_LIVES, STARTING_GOLD, GOLD_PER_KILL, GOLD_PER_WAVE, PRAY_COST_COLOR, PRAY_COST_QUALITY, BASE_STONE_COST, STONE_COST_INCREMENT, RESEARCH_COSTS, GemQuality } from '../constants';
-import { GameState, GridCell, Enemy, StatusEffect, ActivePray, Projectile } from '../types';
+import { GRID_SIZE, CellType, GemType, GamePhase, START_POS, END_POS, GEM_COLORS, RECIPES, RANGE_SCALE, SPAWN_PROBABILITIES, QUALITY_ORDER, HP_BASE, HP_GROWTH_FACTOR, GET_WAVE_DATA, DAMAGE_MULTIPLIERS, DAMAGE_PENALTY, GEM_SPECIAL_EFFECTS, ARMOR_REDUCTION_FACTOR, NEGATIVE_ARMOR_FACTOR, STUN_COOLDOWN, STARTING_LIVES, STARTING_GOLD, GOLD_PER_KILL, GOLD_PER_WAVE, PRAY_COST_COLOR, PRAY_COST_QUALITY, BASE_STONE_COST, STONE_COST_INCREMENT, RESEARCH_COSTS, MAX_WAVE, GemQuality } from '../constants';
+import { GameState, GridCell, Enemy, StatusEffect, ActivePray, Projectile, VisualEffect } from '../types';
 import { isPathPossible, generateFlowField } from '../utils/pathfinding';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -408,10 +408,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isFlying = waveData.abilities.includes('Flying');
     const hasHighArmor = waveData.abilities.includes('High Armor');
     const isImmune = waveData.abilities.includes('Magic Immune');
+    const isEvader = waveData.abilities.includes('Evasion');
+    const isRegen = waveData.abilities.includes('Regen');
+    const isEndgame = waveData.abilities.includes('Endgame');
     
-    const finalHp = isBoss ? rawHp * 5 : rawHp;
+    const finalHp = isEndgame ? rawHp * 3 : (isBoss ? rawHp * 5 : rawHp);
     const speed = isFast ? (2.0 + (state.wave * 0.1)) * 1.5 : (2.0 + (state.wave * 0.1));
-    const armor = hasHighArmor ? 10 + Math.floor(state.wave / 2) : Math.floor(state.wave / 4);
+    const armor = hasHighArmor ? 10 + Math.floor(state.wave / 2)
+               : (isEndgame ? 12 + Math.floor(state.wave / 3)
+               : Math.floor(state.wave / 4));
 
     const id = `enemy-${Date.now()}-${Math.random()}`;
     const newEnemy: Enemy = {
@@ -429,7 +434,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       isBoss,
       isFast,
       isFlying,
-      isImmune,
+      isImmune: isImmune || isEndgame, // Endgame units are also magic immune
+      isEvader,
+      isRegen,
+      isEndgame,
+      evasionChance: isEvader ? 0.35 : 0,
+      regenPerSec: isRegen ? Math.max(0.5, Math.floor(finalHp) * 0.025) : 0,
       isInvisible: waveData.abilities.includes('Invisible'),
       effects: []
     };
@@ -458,10 +468,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   // Phase 4: Damage Pipeline
-  damageEnemy: (id, damage, attackType, isSplash = false) => {
+  damageEnemy: (id, damage, attackType, isSplash = false, sourceCellId) => {
     set((state) => {
       const enemy = state.enemies.find(e => e.id === id);
       if (!enemy || enemy.isDead) return state; // Ignore if already dead/missing
+      enemy.lastHitAt = Date.now(); // Pauses Regen on damage
 
       // Type Multiplier
       let typeMultiplier = DAMAGE_PENALTY; 
@@ -546,7 +557,11 @@ export const useGameStore = create<GameState>((set, get) => ({
                   return e;
               }),
               gold: state.gold + GOLD_PER_KILL,
-              grid: state.grid.map(c => c.targetId === id ? { ...c, targetId: null } : c)
+              grid: state.grid.map(c => {
+                  if (c.targetId === id) return { ...c, targetId: null };
+                  if (sourceCellId && c.id === sourceCellId) return { ...c, killCount: (c.killCount || 0) + 1 };
+                  return c;
+              })
           };
       }
 
@@ -582,18 +597,55 @@ export const useGameStore = create<GameState>((set, get) => ({
   damagePlayer: (amount) => {
     set((state) => {
       const newLives = state.playerLives - amount;
-      return { playerLives: Math.max(0, newLives) };
+      const isOver = newLives <= 0;
+      return {
+        playerLives: Math.max(0, newLives),
+        ...(isOver ? { phase: GamePhase.GAME_OVER } : {}),
+      };
     });
   },
 
   completeWave: () => {
-    set((state) => ({
-      phase: GamePhase.BUILDING,
-      wave: state.wave + 1,
-      gold: state.gold + GOLD_PER_WAVE,
-      // Clear all targets
-      grid: state.grid.map(c => ({ ...c, targetId: null }))
-    }));
+    set((state) => {
+      const nextWave = state.wave + 1;
+      const won = nextWave > MAX_WAVE;
+      return {
+        phase: won ? GamePhase.VICTORY : GamePhase.BUILDING,
+        wave: nextWave,
+        gold: state.gold + GOLD_PER_WAVE,
+        // Clear all targets
+        grid: state.grid.map(c => ({ ...c, targetId: null }))
+      };
+    });
+  },
+
+  // Magic damage (Poison DoT / Radiation aura) — blocked by Magic Immune, no status re-application
+  dealPlainDamage: (id, amount) => {
+    set((state) => {
+      const enemy = state.enemies.find(e => e.id === id);
+      if (!enemy || enemy.isDead || enemy.isImmune) return state;
+      enemy.lastHitAt = Date.now();
+      const newHp = enemy.hp - amount;
+      if (newHp <= 0) {
+        return {
+          enemies: state.enemies.map(e => e.id === id ? { ...e, hp: 0, isDead: true, deathTime: Date.now() } : e),
+          gold: state.gold + GOLD_PER_KILL,
+          lastEffect: {
+            id: uuidv4(),
+            type: 'DEATH',
+            x: enemy.x,
+            y: enemy.y,
+            color: '#888888'
+          },
+          grid: state.grid.map(c => c.targetId === id ? { ...c, targetId: null } : c)
+        };
+      }
+      return { enemies: state.enemies.map(e => e.id === id ? { ...e, hp: newHp } : e) };
+    });
+  },
+
+  spawnEffect: (x, y, type, color) => {
+    set({ lastEffect: { id: uuidv4(), type, x, y, color } });
   },
 
   // --- ECONOMIC ACTIONS ---

@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { useGameStore } from '../../store/useGameStore';
-import { GamePhase, GEM_COLORS, CellType, GEM_STATS, RECIPES, GemType, PRAY_COST_COLOR, PRAY_COST_QUALITY, SPAWN_PROBABILITIES, QUALITY_ORDER, BASE_STONE_COST, STONE_COST_INCREMENT, RESEARCH_COSTS, GemQuality } from '../../constants';
+import { GamePhase, GEM_COLORS, CellType, GEM_STATS, RECIPES, GemType, PRAY_COST_COLOR, PRAY_COST_QUALITY, SPAWN_PROBABILITIES, QUALITY_ORDER, BASE_STONE_COST, STONE_COST_INCREMENT, RESEARCH_COSTS, MAX_WAVE, GemQuality } from '../../constants';
 import { MousePointerClick, Hammer, Play, Heart, Shield, Check, Info, Merge, Sword, Clock, Zap, Scroll, BookOpen, X, ChevronDown, FlaskConical, Coins, Hand, BarChart3, Eraser } from 'lucide-react';
 
 export const Interface: React.FC = () => {
@@ -27,6 +27,7 @@ export const Interface: React.FC = () => {
   const togglePray = useGameStore((state) => state.togglePray);
   const activePray = useGameStore((state) => state.activePray);
   const removeStone = useGameStore((state) => state.removeStone);
+  const initializeGrid = useGameStore((state) => state.initializeGrid);
   const stonesRemovedCount = useGameStore((state) => state.stonesRemovedCount);
 
   const selectedCell = useMemo(() => 
@@ -360,6 +361,27 @@ export const Interface: React.FC = () => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Game Over / Victory Overlay */}
+      {(phase === GamePhase.GAME_OVER || phase === GamePhase.VICTORY) && (
+        <div className="pointer-events-auto absolute inset-0 bg-slate-950/95 backdrop-blur-lg z-50 flex flex-col items-center justify-center gap-5 animate-in fade-in duration-500">
+          <div className="text-7xl">{phase === GamePhase.VICTORY ? '🏆' : '💀'}</div>
+          <h2 className="text-4xl font-black tracking-tight text-white">
+            {phase === GamePhase.VICTORY ? 'VITÓRIA!' : 'DERROTA!'}
+          </h2>
+          <p className="text-slate-300 text-center max-w-sm px-6">
+            {phase === GamePhase.VICTORY
+              ? `Você defendeu todas as ${MAX_WAVE} ondas e o labirinto segurou! `
+              : `Você sobreviveu até a onda ${wave}. O labirinto foi vencido...`}
+          </p>
+          <button
+            onClick={initializeGrid}
+            className="bg-sky-500 hover:bg-sky-400 text-slate-900 font-black px-10 py-4 rounded-full text-lg shadow-lg shadow-sky-500/30 transition-all active:scale-95"
+          >
+            JOGAR NOVAMENTE
+          </button>
         </div>
       )}
 

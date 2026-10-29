@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GemTD Asset Forge — Crystal Cluster Spec",
+  "type": "object",
+  "required": ["id", "kind", "seed", "cluster", "material", "export"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "kind": { "enum": ["crystal-cluster", "geode-egg", "organic-guardian"] },
+    "seed": { "type": "integer", "minimum": 0 },
+    "quality": { "enum": ["draft", "game-mobile", "hero"] },
+    "cluster": { "type": "object" },
+    "geode": { "type": "object" },
+    "organic": { "type": "object" },
+    "material": { "type": "object" },
+    "finish": { "type": "object" },
+    "surface": { "type": "object" },
+    "texture": { "type": "object" },
+    "vfx": { "type": "object" },
+    "export": { "type": "object" }
+  },
+  "additionalProperties": false
+}

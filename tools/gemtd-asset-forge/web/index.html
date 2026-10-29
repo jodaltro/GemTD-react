@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GemTD Asset Forge</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background:#10131b; color:#eef1fb; }
+    body { margin:0; padding:32px; max-width:1200px; margin:auto; }
+    h1 { margin:0 0 8px; } .lead { color:#aeb8cf; margin-top:0; }
+    .panel { background:#191f2d; border:1px solid #303a52; border-radius:14px; padding:20px; margin:18px 0; }
+    .fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; } label { display:grid; gap:6px; font-size:.9rem; color:#c5cee2; }
+    input, textarea, button { font:inherit; } input, textarea { background:#0e1420; color:#f3f6ff; border:1px solid #3b4966; border-radius:8px; padding:10px; }
+    .views { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; } .view { border:1px dashed #4c5f82; border-radius:10px; padding:10px; min-height:190px; }
+    .view strong { display:block; color:#86b6ff; margin-bottom:8px; } .view img { width:100%; height:135px; object-fit:contain; margin-top:8px; background:#0d1119; }
+    button { cursor:pointer; border:0; border-radius:8px; padding:11px 15px; font-weight:700; background:#4d83d9; color:white; } button.secondary { background:#32405a; } button:disabled { opacity:.5; cursor:wait; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; } textarea { width:100%; min-height:310px; box-sizing:border-box; font-family:ui-monospace, monospace; font-size:.82rem; }
+    #status { min-height:1.4em; color:#aeb8cf; } #status.error { color:#ff9d9d; } #activity { margin-top:10px; display:grid; gap:5px; color:#9eb0cf; font-size:.9rem; } .activity-done { color:#8ed9ab; } #preview { max-width:430px; width:100%; border-radius:10px; margin-top:12px; }
+    a { color:#8fbdff; } @media(max-width:760px) { body{padding:16px}.views,.fields{grid-template-columns:1fr 1fr} }
+  </style>
+</head>
+<body>
+  <h1>GemTD Asset Forge</h1>
+  <p class="lead">Ideia em texto ou quatro vistas → direção técnica no OpenRouter → GemSpec → GLB procedural → QA no Blender.</p>
+  <div class="panel">
+    <div class="fields">
+      <label>Nome do asset<input id="assetId" value="ruby-v002" pattern="[a-z0-9-]+" /></label>
+      <label>Modelo de visão (somente quatro vistas)<input id="model" list="visionModels" /></label>
+      <label>Modelo textual (somente prompt)<input id="promptModel" list="promptModels" /></label>
+    </div>
+    <datalist id="visionModels">
+      <option value="google/gemini-3.8-flash">Padrão: rápido e econômico para analisar as quatro vistas</option>
+      <option value="openai/gpt-6-astra">Revisão final: use apenas no candidato que será publicado</option>
+    </datalist>
+    <datalist id="promptModels">
+      <option value="deepseek/deepseek-chat-v3-0324">Padrão: planejamento textual e JSON estruturado</option>
+      <option value="deepseek/deepseek-chat">Alternativa DeepSeek textual</option>
+    </datalist>
+    <label>Ideia do asset (modo sem imagens)<textarea id="prompt" class="prompt" placeholder="Ex.: Um ovo de rocha vulcânica assimétrico, esculpido em volta de uma cavidade azul-ciano. A casca tem estratos quebrados e uma base que parece sustentar seu peso."></textarea></label>
+    <label class="research"><input id="research" type="checkbox" checked /> Pesquisar anatomia / construção real quando ajudar (usa busca do OpenRouter e pode gerar custo adicional).</label>
+    <div class="actions"><button id="describe">Pesquisar e transformar prompt em plano 3D</button></div>
+    <p>O modo prompt cria um brief de artista: silhueta, volumes, peças, superfície e material. Hoje o gerador executa geodos e aglomerados de cristal; estruturas ainda não suportadas ficam registradas como próximas ferramentas.</p>
+    <p>Use imagens do mesmo objeto, com escala e iluminação consistentes. A direção de cada upload é fixa e enviada explicitamente ao modelo.</p>
+    <div class="views" id="views"></div>
+    <div class="actions"><button id="analyse">Analisar 4 vistas e criar GemSpec</button></div>
+  </div>
+  <div class="panel">
+    <label>GemSpec editável (a LLM só controla estes parâmetros seguros)<textarea id="spec" placeholder="A GemSpec aparecerá aqui após a análise."></textarea></label>
+    <div class="actions">
+      <button class="secondary" id="generate">Gerar GLB localmente</button>
+      <button class="secondary" id="construct">Construir por etapas</button>
+      <button class="secondary" id="candidates">Gerar candidatos + Jev</button>
+      <button class="secondary" id="promote" disabled>Promover vencedor</button>
+      <button class="secondary" id="validate">Validar e renderizar no Blender</button>
+      <a id="download" hidden download>Baixar GLB</a>
+      <a id="downloadVfx" hidden download>Baixar configuração VFX</a>
+      <a id="downloadBlend" hidden download>Baixar projeto Blender</a>
+      <a id="downloadBrief" hidden download>Baixar brief de construção</a>
+    </div>
+    <div id="status"></div><div id="activity" hidden></div><img id="preview" hidden alt="Prévia isométrica renderizada pelo Blender" />
+  </div>
+  <script>
+    const directions = [['front','Frente'],['right','Direita'],['back','Costas'],['left','Esquerda']];
+    const images = {};
+    let selectedCandidate = null;
+    const $ = id => document.getElementById(id);
+    function status(message, error=false) { $('status').textContent = message; $('status').className = error ? 'error' : ''; }
+    async function jsonFetch(url, body) { const response = await fetch(url, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const result=await response.json(); if(!response.ok) throw new Error(result.error || 'Falha no servidor'); return result; }
+    function resetActivity(){ $('activity').replaceChildren();$('activity').hidden=false; }
+    function addActivity(message, done=false){ const item=document.createElement('div');item.textContent=(done?'✓ ':'• ')+message;if(done)item.className='activity-done';$('activity').append(item); }
+    async function streamJsonFetch(url, body, progress){ const response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok)throw new Error(`Falha no servidor (${response.status})`);const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',result=null;while(true){const chunk=await reader.read();if(chunk.done)break;buffer+=decoder.decode(chunk.value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();for(const line of lines){if(!line.trim())continue;const event=JSON.parse(line);if(event.type==='progress')progress(event);else if(event.type==='error')throw new Error(event.error||'Falha no pipeline');else if(event.type==='result')result=event;}}if(!result)throw new Error('O pipeline terminou sem resultado.');return result; }
+    function setBusy(busy) { document.querySelectorAll('button').forEach(button => button.disabled = busy); }
+    function assetId() { const value=$('assetId').value.trim(); if(!/^[a-zA-Z0-9-]+$/.test(value)) throw new Error('Use letras, números e hífens no nome do asset.'); return value.toLowerCase(); }
+    directions.forEach(([id,label]) => { const card=document.createElement('div'); card.className='view'; card.innerHTML=`<strong>${label}</strong><input type="file" accept="image/png,image/jpeg,image/webp" data-view="${id}"><img hidden alt="Prévia ${label}">`; const input=card.querySelector('input'), preview=card.querySelector('img'); input.addEventListener('change', () => { const file=input.files[0]; if(!file)return; const reader=new FileReader(); reader.onload=()=>{images[id]=reader.result;preview.src=reader.result;preview.hidden=false;}; reader.readAsDataURL(file); }); $('views').append(card); });
+    async function initialise() { try { const health=await fetch('/api/health').then(r=>r.json()); $('model').value=health.model;$('promptModel').value=health.promptModel; status(health.configured ? 'OpenRouter configurado.' : 'Configure OPENROUTER_API_KEY e OPENROUTER_BASE_URL no .env.', !health.configured); } catch { status('Não foi possível verificar o servidor.', true); } }
+    $('analyse').onclick=async()=>{try{const id=assetId();if(directions.some(([key])=>!images[key]))throw new Error('Envie as quatro vistas antes de analisar.');setBusy(true);status('Observando as vistas, pedindo a rota ao Jev e só então criando a GemSpec…');const result=await jsonFetch('/api/analyse',{assetId:id,model:$('model').value.trim(),images});$('spec').value=JSON.stringify(result.spec,null,2);const route=result.route.choices;status(`Jev definiu ${route.family.choice} / ${route.construction_route.choice}. GemSpec salva em ${result.specPath}.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('generate').onclick=async()=>{try{assetId();if(!$('spec').value.trim())throw new Error('Gere ou cole uma GemSpec primeiro.');setBusy(true);status('Gerando malha e GLB localmente…');const result=await jsonFetch('/api/generate',{spec:$('spec').value});$('spec').value=JSON.stringify(result.spec,null,2);$('download').href=result.glbUrl;$('download').hidden=false;$('download').textContent=`Baixar GLB bruto (${result.triangles} triângulos)`;$('downloadVfx').href=result.vfxUrl;$('downloadVfx').hidden=false;status(`GLB e configuração VFX criados em ${result.bundlePath}. Agora aplique o acabamento no Blender.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('construct').onclick=async()=>{try{if(!$('spec').value.trim())throw new Error('Gere ou cole uma GemSpec primeiro.');setBusy(true);status('Construindo as etapas de massa, composição e acabamento…');const result=await jsonFetch('/api/construct',{spec:$('spec').value});const first=result.stages[0],last=result.stages[result.stages.length-1];$('download').href=last.modelUrl;$('download').hidden=false;$('download').textContent='Baixar montagem completa por etapas';status(`Plano criado em ${result.bundlePath}: ${first.id} → ${last.id}.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('candidates').onclick=async()=>{try{if(!$('spec').value.trim())throw new Error('Gere ou cole uma GemSpec primeiro.');setBusy(true);status('Gerando feixe de candidatos e pedindo decisão tipada ao Jev…');const result=await jsonFetch('/api/candidates',{spec:$('spec').value,count:9});selectedCandidate=result.winner;const candidate=result.candidates.find(item=>item.id===result.winner);$('download').href=candidate.modelUrl;$('download').hidden=false;$('download').textContent=`Baixar candidato Jev: ${result.winner}`;$('promote').disabled=false;const confidence=result.decision.winner.confidence;status(`Jev selecionou ${result.winner} (${Math.round(confidence*100)}% confiança) em ${result.bundlePath}. Revise ou promova-o.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('promote').onclick=async()=>{try{if(!selectedCandidate)throw new Error('Gere candidatos primeiro.');setBusy(true);status('Promovendo o candidato vencedor ao bundle principal…');const result=await jsonFetch('/api/promote-candidate',{assetId:assetId(),candidateId:selectedCandidate});$('download').href=result.glbUrl;$('download').hidden=false;$('download').textContent='Baixar GLB vencedor';status(`Candidato ${result.selection.candidateId} promovido em ${result.bundlePath}. Agora valide no Blender.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('validate').onclick=async()=>{try{const id=assetId();setBusy(true);status('Blender está suavizando bordas, criando o material, validando e renderizando…');const result=await jsonFetch('/api/validate',{assetId:id});$('preview').src=result.previewUrl+'?t='+Date.now();$('preview').hidden=false;$('download').href=result.polishedGlbUrl;$('download').hidden=false;$('download').textContent='Baixar GLB polido';$('downloadBlend').href=result.blendUrl;$('downloadBlend').hidden=false;$('downloadBlend').textContent='Baixar projeto Blender editável';status(`QA aprovada em ${result.bundlePath}: ${result.report.triangles} triângulos após bevel, ${result.report.meshCount} meshes e ${result.report.artSpec.vfxKind} configurado.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    $('describe').onclick=async()=>{try{const id=assetId(), prompt=$('prompt').value.trim();if(prompt.length<12)throw new Error('Descreva a ideia com mais detalhe antes de continuar.');setBusy(true);resetActivity();status('Iniciando plano de produção…');const result=await streamJsonFetch('/api/describe-stream',{assetId:id,promptModel:$('promptModel').value.trim(),prompt,research:$('research').checked},event=>{addActivity(event.message,event.phase==='research-complete'||event.phase==='complete');status(event.message);});$('spec').value=JSON.stringify(result.spec,null,2);$('downloadBrief').href='/files/'+result.briefPath;$('downloadBrief').hidden=false;const route=result.route.choices;status(`Jev definiu ${route.family.choice} / ${route.construction_route.choice}. Plano salvo em ${result.briefPath}. Agora construa por etapas, gere candidatos ou gere o GLB.`);}catch(error){status(error.message,true)}finally{setBusy(false)}};
+    initialise();
+  </script>
+</body>
+</html>
